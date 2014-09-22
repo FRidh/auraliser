@@ -7,9 +7,10 @@ from scipy.signal import firwin, firwin2
 from scipy.signal import fftconvolve as convolve
 import abc
 import acoustics.signal
+import acoustics.generator
 import matplotlib.pyplot as plt
 
-from auralisation import db_to_lin
+from .auralisation import db_to_lin
 
 class Generator(object):
     __metaclass__ = abc.ABCMeta
@@ -48,8 +49,7 @@ class Custom(Generator):
     
 
 class Sine(Generator):
-    """
-    Use a sine wave as signal.
+    """Sine wave generator.
     """
     
     def __init__(self, frequency):
@@ -65,15 +65,32 @@ class Sine(Generator):
         return np.sin(2.0 * np.pi * self.frequency * np.arange(0.0, t, 1.0/fs))
     
     
-class WhiteNoise(Generator):
+class Noise(Generator):
+    """White noise generator.
     """
-    Use white noise as signal.
-    """
+    
+    def __init__(self, color='white'):
+        
+        self.color = color
     
     def output(self, t, fs):
         """
         """
-        return np.random.randn(t*fs)
+        return acoustics.generator.noise(t*fs, color=self.color)
+    
+    @property
+    def color(self):
+        """Color of noise.
+        """
+        return self._color
+    
+    @color.setter
+    def color(self, value):
+        if value not in acoustics.generator.noise_generators.keys():
+            raise ValueError("Noise color is unavailable.")
+        else:
+            self._color = value
+        
     
 class WhiteBand(Generator):
     """

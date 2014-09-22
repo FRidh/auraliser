@@ -1,4 +1,4 @@
-from model import Geometry
+from .model import Geometry
 
 
 class Reverter(object):

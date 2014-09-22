@@ -12,13 +12,13 @@ from mpl_toolkits.mplot3d import Axes3D
 #from scipy.interpolate import interp1d as ip
 from scipy.interpolate import InterpolatedUnivariateSpline as ip
 
-from signal import Signal as Signal    
+from .signal import Signal as Signal    
 
 from acoustics.atmosphere import Atmosphere    
 from acoustics.octave import Octave
 from acoustics.signal import convolve
 
-from Base import norm, unit_vector
+from .Base import norm, unit_vector
 
 import geometry as Geo
 
@@ -104,63 +104,54 @@ class Model(object):
         """
         return - np.gradient(self.geometry.distance) * signal.sample_frequency
     
-    @property
-    def directivity_vector(self):
-        """
-        Directivity vector.
+
+    #def _atmospheric_absorption(self, signal, sign, taps, N, n_d):
+        #"""
+        #Apply or unapply atmospheric absorption depending on sign.
+        #"""
+        #d = self.geometry.distance
         
-        Uses the receiver position and the directivity position of the source.
-        """
-        return unit_vector(self.geometry.receiver.position - self.geometry.source.position_directivity)
-    
-    
-    def _atmospheric_absorption(self, signal, sign, taps, N, n_d):
-        """
-        Apply or unapply atmospheric absorption depending on sign.
-        """
-        d = self.geometry.distance
-        
-        if n_d is not None:
-            d_ir = np.linspace(d.min(), d.max(), n_d, endpoint=True)   # Distances to check
+        #if n_d is not None:
+            #d_ir = np.linspace(d.min(), d.max(), n_d, endpoint=True)   # Distances to check
             
-            start = (N-taps)//2
-            stop = (N+taps)//2 - 1
+            #start = (N-taps)//2
+            #stop = (N+taps)//2 - 1
             
-            ir_i = self.atmosphere.ir_attenuation_coefficient(d=d_ir, N=N, fs=signal.sample_frequency, sign=sign)[start:stop+1, :]
+            #ir_i = self.atmosphere.ir_attenuation_coefficient(d=d_ir, N=N, fs=signal.sample_frequency, sign=sign)[start:stop+1, :]
             
-            indices = np.argmin(np.abs(d.reshape(-1,1) - d_ir), axis=1)
-            ir = ir_i[:, indices]
+            #indices = np.argmin(np.abs(d.reshape(-1,1) - d_ir), axis=1)
+            #ir = ir_i[:, indices]
             
-        else:
-            ir = self.atmosphere.ir_attenuation_coefficient(d=self.geometry.distance, N=N, fs=signal.sample_frequency, sign=sign)[0:taps,:]
+        #else:
+            #ir = self.atmosphere.ir_attenuation_coefficient(d=self.geometry.distance, N=N, fs=signal.sample_frequency, sign=sign)[0:taps,:]
         
-        return Signal(convolve(signal, ir), sample_frequency=signal.sample_frequency)
-        
-        
-    def apply_atmospheric_absorption(self, signal, taps=10, N=2048, n_d=None):
-        """
-        Apply atmospheric absorption to ``signal``.
-        
-        :param signal: Signal
-        :type signal: :class:`auraliser.signal.Signal`
-        :param taps: Amount of filter taps to keep.
-        :param N: Blocks to use for performing the FFT. Determines frequency resolution.
-        :param n_d: Amount of unique distances to consider.
-        """
-        return self._atmospheric_absorption(signal, +1, taps, N, n_d)
+        #return Signal(convolve(signal, ir), sample_frequency=signal.sample_frequency)
         
         
-    def unapply_atmospheric_absorption(self, signal, taps=10, N=2048, n_d=None):
-        """
-        Unapply atmospheric absorption to `signal`.
+    #def apply_atmospheric_absorption(self, signal, taps=128, N=2048, n_d=None):
+        #"""
+        #Apply atmospheric absorption to ``signal``.
         
-        :param signal: Signal
-        :type signal: :class:`auraliser.signal.Signal`
-        :param taps: Amount of filter taps to keep.
-        :param N: Blocks to use for performing the FFT. Determines frequency resolution.
-        :param n_ir: Value between 0 and 1 representing the percentage of unique impulse responses to use.
-        """
-        return self._atmospheric_absorption(signal, -1, taps, N, n_d)
+        #:param signal: Signal
+        #:type signal: :class:`auraliser.signal.Signal`
+        #:param taps: Amount of filter taps to keep.
+        #:param N: Blocks to use for performing the FFT. Determines frequency resolution.
+        #:param n_d: Amount of unique distances to consider.
+        #"""
+        #return self._atmospheric_absorption(signal, +1, taps, N, n_d)
+        
+        
+    #def unapply_atmospheric_absorption(self, signal, taps=128, N=2048, n_d=None):
+        #"""
+        #Unapply atmospheric absorption to `signal`.
+        
+        #:param signal: Signal
+        #:type signal: :class:`auraliser.signal.Signal`
+        #:param taps: Amount of filter taps to keep.
+        #:param N: Blocks to use for performing the FFT. Determines frequency resolution.
+        #:param n_ir: Value between 0 and 1 representing the percentage of unique impulse responses to use.
+        #"""
+        #return self._atmospheric_absorption(signal, -1, taps, N, n_d)
     
     
     ###@staticmethod
@@ -169,37 +160,6 @@ class Model(object):
         ###Apply time- and frequency-variant strength to signal.
         ###"""
         
-    
-    
-    def apply_spherical_spreading(self, signal):
-        """
-        Apply spherical spreading to ``signal``.
-        
-        .. math:: p_2 = p_1 \\frac{r_2}{r_1}
-        
-        where :math:`r_2` is 1.0.
-        
-        :param signal: Signal
-        :type signal: :class:`auraliser.signal.Signal`
-        
-        :rtype: :class:`auraliser.signal.Signal`
-        """
-        return signal / self.geometry.distance # * 1.0
-        
-    def unapply_spherical_spreading(self, signal):
-        """
-        Unapply spherical spreading.
-        
-        .. math:: p_2 = p_1 \\frac{r_2}{r_1}
-        
-        where :math:`r_1` is 1.0.
-        
-        :param signal: Signal
-        :type signal: :class:`auraliser.signal.Signal`
-        
-        :rtype: :class:`auraliser.signal.Signal`
-        """
-        return signal * self.geometry.distance # / 1.0
     
     #@staticmethod
     #def _interpolate(signal, delay):
@@ -250,98 +210,6 @@ class Model(object):
         #np.savetxt('k_e_floor', k_e_floor, fmt='%i')
         #np.savetxt('signalout', signal_out, fmt='%f')
         
-    @staticmethod
-    def _apply_doppler_shift(signal, delay):
-        """
-        Apply ``delay`` to ``signal``.
-        
-        :param signal: Signal to be delayed.
-        :type signal: :class:`auraliser.signal.Signal`
-        :param delay: Delay time
-        :type delay: :class:`np.ndarray`
-        """
-        k_e = np.arange(0, len(signal), 1)                  # Time axis emitter
-        k_r = k_e + delay * signal.sample_frequency         # Time axis receiver
-        
-        f = ip(k_r, signal)     # Create a function to interpolate the signal at the receiver.
-        
-        truth = (k_e >= np.min(k_r) ) * (k_e < np.max(k_r)) # We can only interpolate, not extrapolate...
-        signal_out = np.nan_to_num(f(k_e * truth)) * truth                 # Interpolated signal
-        
-        signal_out = signal_out * (np.abs(signal_out) <= 1.0) + 1.0 * (np.abs(signal_out) > 1.0)    # Remove any pulses (sonic booms)
-        
-        """We want to change the signal in place."""
-        #signal *= 0.0
-        #signal += signal_out
-        
-        """For debugging"""
-        #np.savetxt('k_r', k_r, fmt='%f')
-        #np.savetxt('k_e', k_e, fmt='%i')
-        #np.savetxt('signalout', signal_out, fmt='%f')
-        
-        return signal_out
-        
-    @staticmethod
-    def _map_source_to_receiver(signal, delay):
-        """
-        Apply ``delay`` to ``signal`` in-place.
-        
-        :param signal: Signal to be delayed.
-        :type signal: :class:`auraliser.signal.Signal`
-        :param delay: Delay time
-        :type delay: :class:`np.ndarray`
-        """
-                
-        k_r = np.arange(0, len(signal), 1)          # Create vector of indices
-        k_e = k_r - delay * signal.sample_frequency # Create vector of warped indices
-        
-        k_e_floor = np.floor(k_e).astype(int)       # Floor the warped indices. Convert to integers so we can use them as indices.
-        
-        truth = ( k_e_floor >= 0 ) * ( k_e_floor < len(signal) )
-        
-        #k_e_floor = k_e_floor * (k_e_floor >= 0) * (k_e_floor < len(signal)) + -1 * (  ( k_e_floor < 0) + (k_e_floor >= len(signal)) )
-        k_e_floor = k_e_floor * truth + -1 * np.negative(truth)
-        
-        signal_out = ( ( 1.0 - k_e + k_e_floor) * signal[np.fmod(k_e_floor, len(signal))] * ( k_e_floor >= 0) * (k_e_floor < len(signal)) ) +  \
-                     (k_e - k_e_floor) * signal[np.fmod(k_e_floor +1, len(signal))] * (k_e_floor+1 >= 0) * (k_e_floor +1 < len(signal)) + np.zeros(len(signal))
-        
-        signal_out *= truth
-        """For debugging"""
-        #np.savetxt('k_e_floor', k_e_floor, fmt='%i')
-        #np.savetxt('signalout', signal_out, fmt='%f')
-        
-        """We want to change the signal in place."""
-        #signal *= 0.0           # Set to zeros
-        #signal += signal_out    # And add our new signal
-        
-        return signal_out
-        
-    def apply_doppler(self, signal):
-        """
-        Apply Doppler shift to ``signal``.
-        
-        :param signal: Signal to be shifted.
-        :type signal: :class:`auraliser.signal.Signal`
-        """        
-        return Signal(self._apply_doppler_shift(signal, self.delay), sample_frequency=signal.sample_frequency)
-        
-    def unapply_doppler(self, signal):
-        """
-        Unapply Doppler shift to ``signal``.
-        
-        :param signal: Signal to be shifted.
-        :type signal: :class:`auraliser.signal.Signal`
-        """
-        return Signal(self._map_source_to_receiver(signal, - self.delay), sample_frequency=signal.sample_frequency)
-        #self._experiment(signal, -self.delay)
-        
-    def doppler_shift(self, frequency):
-        """
-        Apply Doppler shift based on this model to ``frequency``.
-        
-        :param frequency: Frequency to be shifted.
-        """
-        raise NotImplementedError
     
     def plot_delay(self, filename, signal=None):
         """
@@ -479,6 +347,28 @@ class Geometry(object):
         return norm(self.source.position - self.receiver.position)
         #return np.sum(np.abs(self.source.position - self.receiver.position)**2.0, axis=1)**(0.5)
 
+
+    @property
+    def spatial_separation(self):
+        """Spatial separation :math:`\\rho`.
+        """
+        #r2 = self.distance
+        #r1 = self.distance[0]*np.ones_like(r2)
+        c = norm(self.source.position - self.source.position[0])
+        
+        #c = norm(np.diff(self.source.position))
+        return c
+        
+        #print(self.source.position)
+        #print(self.source.position - self.source.position[0])
+        #return c
+        #theta = np.arccos( (r1**2.0+r2**2.0-c**2.0) / (2.0*r1*r2))
+        #print(theta)
+        
+        #rho = np.tan(theta) * r2
+        #return rho
+        
+
     @property
     def orientation(self):
         """
@@ -496,7 +386,18 @@ class Geometry(object):
         """
         return unit_vector(self.source.position - self.receiver.position)
         
+    @property
+    def directivity_vector(self):
+        """
+        Directivity vector.
+        
+        Uses the receiver position and the directivity position of the source.
+        """
+        #return unit_vector(self.geometry.receiver.position - self.geometry.source.position_directivity)
+        #return unit_vector(self.geometry.source.position_directivity - self.geometry.receiver.position)
+        return unit_vector(self.receiver.position_directivity - self.source.position)
     
+
     def plot_position(self, filename):
         """
         Plot position of source and receiver and write to ``filename``.
