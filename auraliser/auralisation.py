@@ -21,11 +21,14 @@ from functools import partial
 from multiprocessing import Pool
 from copy import deepcopy
 import logging
+import abc
+
 import ism
 
 import acoustics
 from acoustics.atmosphere import Atmosphere
 from acoustics.directivity import Omni
+from acoustics._signal import Signal
 
 # To render the geometry
 import matplotlib.pyplot as plt
@@ -33,9 +36,11 @@ from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 # Local
-from ._signal import Signal
+#from ._signal import Signal
 import auraliser
 import auraliser.propagation
+from .generator import Noise
+from .tools import db_to_lin, lin_to_db
 
 #from .pointvector import PointVector
 from geometry import Point, Vector
@@ -110,6 +115,7 @@ class PositionDescriptor(object):
             else:
                 instance.__dict__[self.attr] = np.asarray(value)
 
+
 class Auraliser(object):
     """
     An auraliser object contains the model for simulating how :attr:`sources` sound at :attr:`receivers` for a given :attr:`atmosphere`.
@@ -159,6 +165,9 @@ class Auraliser(object):
         Geometry of the model described by :class:`Geometry`.
         """
     
+    
+    def __del__(self):
+        del self._objects[:]
     
     def _get_real_object(self, name):
         """Get real object by name.
@@ -295,36 +304,62 @@ class Auraliser(object):
     def _auralise_subsource(self, subsource, receiver):
         """Synthesize the signal of a subsource.
         """
-        subsource.generate_signals() # Generate the signals.
         
+        # Generate the emission signals.
+        subsource.generate_signals()
+        
+        # Determine mirrors
         if self.settings['reflections']['include'] and len(self.geometry.walls) > 0: # Are reflections possible?
             n = self.settings['reflections']['update_resolution']
             subsource_position = [Point(*src) for src in subsource.position[::n]]# subsource.position[::n]
-            receiver_position = Point(*receiver.position[0])
+            receiver_position = [Point(*receiver.position[0])]
             
             #print(subsource_position._data.shape)
             
+            # Mirror receivers
             mirrors = self._get_mirror_sources_from_ism(subsource_position, receiver_position)
+            
+            mirrors = list(mirrors)
+            print(len(mirrors))
+            
             del subsource_position, receiver_position
             
-            mirrors = _prepare_mirrors(mirrors, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere)
+            #mirrors = _prepare_mirrors(mirrors, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere)
+            emissions = (_apply_source_effects(mirror, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere) for mirror in mirrors)
             
-            signal = np.zeros(self.samples)
-
-            #with Pool() as pool:
-                #for mirror in pool.starmap(_auralise_mirror, mirrors):
-            for mirror in itertools.starmap(_auralise_mirror, mirrors):    
-                    signal += mirror
-            return signal
-    
+            # pre-zip mirrors for propagation effects calculation
+            mirrors = ((subsource.position, np.array(mirror.position), emission, self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror, emission in zip(mirrors, emissions))
+            del emissions
         else: # No walls, so no reflections. Therefore the only source is the real source.
-            signal = subsource.signal( unit_vector(receiver.position - subsource.position))
+            emission = subsource.signal( unit_vector(receiver.position - subsource.position))
             #mirror = Mirror(receiver.position, None, None, unit_vector(receiver.position.asarray()-subsource.position.asarray()))
-            return _auralise_mirror(subsource.position, receiver.position, signal, self.settings, self.samples, self.sample_frequency, self.atmosphere)
-            
+            mirrors = [ (np.array(subsource.position), receiver.position, emission, self.settings, self.samples, self.sample_frequency, self.atmosphere) ]
+            del emission
+            #signals = _apply_propagation_effects(np.array(subsource.position), receiver.position, signal, self.settings, self.samples, self.sample_frequency, self.atmosphere)
+        
+        mirrors=list(mirrors)
+        print(mirrors)
+        
+        # Iterable containing immission per subsource.
+        signals = itertools.starmap(_apply_propagation_effects, mirrors)
+        signals = list(signals)
+        print(len(signals))
+        #print(len(list(signals)))
+        #with Pool() as pool:
+            #signals = pool.starmap(_apply_propagation_effects, mirrors)
+        
+        print(len(mirrors))
+        # Apply receiver effects
+        signal = 0.0
+        for signal_of_mirror, mirror in zip(signals, mirrors):
+            out = _apply_receiver_effects(mirror[0], receiver, signal_of_mirror, self.settings)
+            print(out)
+            signal += out
+        return signal
+        
+        
     def _auralise_source(self, source, receiver):
-        """
-        Synthesize the signal due to a source. This includes all subsources and respective mirror sources.
+        """Synthesize the signal at `receiver` due to `source`. This includes all subsources and respective mirror sources.
         """
         #signals = list()
         #for sub_src in source.subsources:
@@ -338,8 +373,7 @@ class Auraliser(object):
         return signal    
 
     def auralise(self, receiver, sources=None):
-        """
-        Synthesise the signal due to one or multiple sources. All subsources are included.
+        """Synthesise the signal due to one or multiple sources at `receiver`. All subsources are included.
         
         :param receiver: Receiver.
         :param sources: Iterable of sources.
@@ -356,110 +390,180 @@ class Auraliser(object):
         signal = 0.0
         for source in sources:
             signal += self._auralise_source(source, receiver)
+        
+        return Signal(signal, fs=self.sample_frequency)
+        #return [Signal(channel, fs=self.sample_frequency) for channel in signal]
+        
         #return signal
-        return Signal(signal, sample_frequency=self.sample_frequency)
+        #return Signal(signal, fs=self.sample_frequency)
     
+    def plot(self, **kwargs):
+        """Plot model.
+        
+        :seealso: :func:`plot_model`.
+        """
+        return plot_model(self, **kwargs)
 
-def _prepare_mirrors(mirrors, subsource, settings, samples, fs, atmosphere):
-    """Prepare mirrors.
+
+def _apply_source_effects(mirror, subsource, settings, samples, fs, atmosphere):
+    """Apply source effects to source.
+    
+    Includes:
+        - Directivity of source
+        - Effectiveness and strength of mirror
+    
     """
-    logging.info("Preparing mirrors...")
+    logging.info("Applying source effects...")
 
     n = settings['reflections']['update_resolution'] 
-    for mirror in mirrors:
-        
-        orientation = unit_vector(np.array(position_for_directivity(mirror)) - subsource.position) # Orientation from receiver to source.
-        signal = subsource.signal( orientation ) # Signal for given orientation.
-        del orientation
-        
-        print(len(signal))
-        print(mirror.effective.shape)
-        
-        
-        if mirror.effective is not None:
-            signal *= np.repeat(mirror.effective, n, axis=0)[0:samples]
-            del mirror.effective
     
-        # Apply correct source strength due to reflections.
-        if not settings['reflections']['force_hard']:
-            if mirror.strength is not None:
-                #signal = acoustics.signal.convolve(signal, auraliser.propagation.ir_real_signal(np.repeat(mirror.strength, n, axis=0), settings['reflections']['taps']).T)[0:samples]
-                signal = acoustics.signal.convolve(signal, np.repeat(  (auraliser.propagation.ir_real_signal(mirror.strength)[:,0:settings['reflections']['taps']]), n, axis=0).T[:,0:samples])[0:samples]
-                del mirror.strength
-        
-        #out = (subsource.position, mirror.position, signal, np.repeat(mirror.effective, n, axis=0), np.repeat(mirror.strength, n, axis=0), settings, samples, fs, atmosphere )
-        out = (subsource.position, mirror.position, signal, settings, samples, fs, atmosphere )
-        del mirror
-        yield out
+    # Emission signal with directivity.
+    orientation = unit_vector(np.array(position_for_directivity(mirror)) - subsource.position) # Orientation from receiver to source.
+    signal = subsource.signal( orientation ) # Signal for given orientation.
+    del orientation
+    
+    if mirror.effective is not None:
+        signal *= np.repeat(mirror.effective, n, axis=0)
+        signal = signal[0:samples]
+        del mirror.effective
 
+    # Apply correct source strength due to reflections.
+    if not settings['reflections']['force_hard']:
+        if mirror.strength is not None:
+            #signal = acoustics.signal.convolve(signal, auraliser.propagation.ir_real_signal(np.repeat(mirror.strength, n, axis=0), settings['reflections']['taps']).T)[0:samples]
+            signal = acoustics.signal.convolve(signal, np.repeat(  (auraliser.propagation.ir_real_signal(mirror.strength)[:,0:settings['reflections']['taps']]), n, axis=0).T[:,0:samples])[0:samples]
+            # We cannot yet delete the strength of the object since a child mirror source might need it.
+            # Same for the position, as the child needs to know it for the directivity.
+            # But, we can at least delete the strength of this mother source. (also not true?!)
+            #del mirror.strength 
+            #del mirror.mother.strength, mirror.mother.effective, mirror.mother.distance
+    
+    del mirror
+    return signal
 
+#def _apply_mirror_effects():
+    #pass
 
-def _auralise_mirror(source, receiver, signal, settings, samples, fs, atmosphere):
+    
+def _apply_receiver_effects(source_position, receiver, signal, settings):
+    """Apply receiver effects to receiver.
+    
+    :param source: Source
+    :param receiver: Receiver
+    :param signal: Signal
+    :returns: Multi-channel signal adjusted for receiver effects.
+    
+    Includes:
+        - Directivity of receiver.
+    
     """
-    Synthesize the signal due to a single mirror.
+    
+    # Orientation from source to receiver.    
+    orientation = unit_vector(source_position - receiver.position) 
+    
+    # Multichannel receiver
+    signals = np.tile(signal, (len(receiver.channels), 1))
+    
+    resolution = settings['directivity']['update_resolution']
+    
+    # Apply directivity correction to channel
+    for i, channel in enumerate(receiver.channels):
+        # Sample directivity only every `resolution` samples.
+        d = np.repeat(channel.directivity.using_cartesian(*orientation[::resolution].T), resolution)[0:len(signal)]
+        signals[i,:] *= d
+    return signals
+
+def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, atmosphere):
+    """Apply the propagation filters for this specific source-mirror-receiver combination.    
     
     :param source: Source position
     :param receiver: Receiver position
     :param signal: Initial signal
-    :param mirror_effective: Effectiveness of mirror
-    :param mirror_strength: Strength of mirror
     :param settings: Settings dictionary.
     :param samples: Amount of samples.
     :param fs: Sample frequency
     :param atmosphere: Atmosphere
+    :returns: Single-channel signal.
+    
+    Propagation effect included are:
+        - Amplitude decrease due to spherical spreading.
+        - Delay due to spherical spreading (Doppler shift).
+        - Atmospheric turbulence.
+        - Atmospheric attenuation.
     """
     logging.info("Auralising mirror")
     
     distance = norm(source - receiver)
-            
-    # Apply Doppler shift.
+
+    # Apply delay due to spreading (Doppler shift)
     if settings['doppler']['include'] and settings['doppler']['frequency']:
         logging.info("Applying Doppler frequency shift.")
         signal = auraliser.propagation.apply_doppler(signal, distance/atmosphere.soundspeed, fs)
     
-    # Apply turbulence.
+    # Apply atmospheric turbulence.
     if settings['turbulence']['include']:
         logging.info("Applying turbulence.")
         
         if settings['turbulence']['spatial_separation']:
-            rho, dr = auraliser.propagation._spatial_separation(source, source[0], receiver)
+            rho, dr = auraliser.propagation._spatial_separation(source, (np.random.randn(3))[None,:], receiver)
+            rho, dr = auraliser.propagation._spatial_separation(source, (source[0]+np.random.randn(3))[None,:], receiver)
+            #rho, dr = auraliser.propagation._spatial_separation(source, source[0][None,:], receiver[None,:])
             #rho = norm(source.asarray() - source.asarray()[0])
             turbulence_distance = distance #+ dr
+            rho = np.linalg.norm( np.gradient(source)[0], axis=1 )
         else:
             rho = np.zeros_like(signal)
             turbulence_distance = distance
-        Cv = 0.001  
-        signal = auraliser.propagation.apply_turbulence(signal,
-                                                        fs,
-                                                        settings['turbulence']['mean_mu_squared'],
-                                                        turbulence_distance,
-                                                        settings['turbulence']['correlation_length'],
-                                                        rho,
-                                                        Cv,
-                                                        atmosphere.soundspeed,
-                                                        settings['turbulence']['fraction'],
-                                                        settings['turbulence']['order'],
-                                                        settings['turbulence']['saturation'],
-                                                        settings['turbulence']['amplitude'],
-                                                        settings['turbulence']['phase'],
-                                                        settings['turbulence']['random_seed'],
-                                                        )
         
-        #signal = auraliser.propagation.apply_turbulence(signal,
-                                                        #fs,
-                                                        #settings['turbulence']['mean_mu_squared'],
-                                                        #turbulence_distance,
-                                                        #settings['turbulence']['correlation_length'],
-                                                        #rho,
-                                                        #atmosphere.soundspeed,
-                                                        #settings['turbulence']['fraction'],
-                                                        #settings['turbulence']['order'],
-                                                        #settings['turbulence']['saturation'],
-                                                        #settings['turbulence']['amplitude'],
-                                                        #settings['turbulence']['phase'],
-                                                        #settings['turbulence']['random_seed'],
-                                                        #)
-        del rho                            
+        ##print(rho)
+        ###rho = np.ones_like(rho) * rho.mean()
+        #rho = np.abs(rho)
+        ##rho = np.ones_like(rho) 
+        ##print(np.abs(rho))
+        #from .propagation import moving_average
+        #n = 1000
+        #rho = moving_average(rho, n=n)
+        #rho = np.hstack((rho, np.ones(n-1)*rho[-1]))
+        #print(rho)
+        
+        if settings['turbulence']['model'] == 'gaussian':
+            signal = auraliser.propagation.apply_turbulence_gaussian(signal,
+                                                            fs,
+                                                            settings['turbulence']['mean_mu_squared'],
+                                                            turbulence_distance,
+                                                            settings['turbulence']['correlation_length'],
+                                                            rho,
+                                                            atmosphere.soundspeed,
+                                                            settings['turbulence']['fraction'],
+                                                            settings['turbulence']['order'],
+                                                            settings['turbulence']['saturation'],
+                                                            settings['turbulence']['amplitude'],
+                                                            settings['turbulence']['phase'],
+                                                            settings['turbulence']['random_seed'],
+                                                            )
+            del rho                            
+        
+        elif settings['turbulence']['model'] == 'vonkarman':
+            rho = np.ones_like(rho)
+            signal = auraliser.propagation.apply_turbulence_vonkarman(signal,
+                                                            fs,
+                                                            settings['turbulence']['mean_mu_squared'],
+                                                            turbulence_distance,
+                                                            settings['turbulence']['correlation_length'],
+                                                            rho,
+                                                            settings['turbulence']['variance_windspeed'],
+                                                            atmosphere.soundspeed,
+                                                            settings['turbulence']['fraction'],
+                                                            settings['turbulence']['order'],
+                                                            settings['turbulence']['saturation'],
+                                                            settings['turbulence']['amplitude'],
+                                                            settings['turbulence']['phase'],
+                                                            settings['turbulence']['random_seed'],
+                                                            )
+        
+        else:
+            raise ValueError("Turbulence model '{}' does not exist".format(settings['turbulence']['model']))
+        
         
     # Apply atmospheric absorption.
     if settings['atmospheric_absorption']['include']:
@@ -477,11 +581,14 @@ def _auralise_mirror(source, receiver, signal, settings, samples, fs, atmosphere
         logging.info("Applying spherical spreading.")
         signal = auraliser.propagation.apply_spherical_spreading(signal, distance)
     
-    # Force zeros until first real sample arrives.
-    initial_delay = int(distance[0]/atmosphere.soundspeed * fs)
-    signal[0:initial_delay] = 0.0
+    
+    # Force zeros until first real sample arrives. Should only be done when the time delay (Doppler) is applied.
+    if settings['doppler']['include'] and settings['doppler']['frequency']:
+        initial_delay = int(distance[0]/atmosphere.soundspeed * fs)
+        signal[0:initial_delay] = 0.0
     
     return signal
+    
     
     
 class Base(object):
@@ -505,27 +612,72 @@ class Base(object):
         self.description = description
         """Description of object.
         """
+        
+    
+    def __del__(self):
+        del self._auraliser  
+        
 
     def __str__(self):
-        return "{}({})".format(self.__class__.__name__, self.name)
+        return "({})".format(self.name)
 
     def __repr__(self):
-        return "{}({})".format(self.__class__.__name__, self.name)
+        return "{}({})".format(self.__class__.__name__, str(self))
 
-#class NamedObject(object):
-    #"""Descriptor to access named object.
+    @property
+    @abc.abstractmethod
+    def position(self):
+        """Position
+        """
+
+    def plot_position(self, interval=1):
+        """Plot position.
+        """
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.plot(*self.position[::interval].T)
+        ax.set_xlabel(r'$x$ in m')
+        ax.set_ylabel(r'$y$ in m')
+        ax.set_zlabel(r'$z$ in m')
+        return fig
+
+
+#class Receiver(Base):
+    #"""Receiver
     #"""
     
+    #position = PositionDescriptor('position')
+    #"""Position of object.
+    #"""
+    
+    #def __init__(self, auraliser, name, position):
+        #"""
+        #Constructor.
+        #"""
+        
+        #super().__init__(auraliser, name=name)
+        
+        #self.position = position
+    
+    
+    #def auralise(self, sources=None):
+        #"""
+        #Auralise the scene at receiver location.
+        
+        #:param sources: List of sources to include. By default all the sources in the scene are included.
+        
+        #"""
+        #return self._auraliser.auralise(self, sources)
+
 class Receiver(Base):
-    """
-    Receiver
+    """Receiver
     """
     
     position = PositionDescriptor('position')
     """Position of object.
     """
     
-    def __init__(self, auraliser, name, position):
+    def __init__(self, auraliser, name, position, channels=None):
         """
         Constructor.
         """
@@ -533,6 +685,18 @@ class Receiver(Base):
         super().__init__(auraliser, name=name)
         
         self.position = position
+    
+        self.channels = [Channel(directivity=Omni())]
+    
+    #@channels.setter
+    #def channels(self, x):
+        #self._channels = x
+    
+    #@property
+    #def channels(self):
+        #"""Channels.
+        #"""
+        #return self._channels
     
     def auralise(self, sources=None):
         """
@@ -542,6 +706,35 @@ class Receiver(Base):
         
         """
         return self._auraliser.auralise(self, sources)
+
+
+class Channel(object):
+    """Channel for receiver.
+    
+    """
+    
+    def __init__(self, directivity=None):
+        
+        self.directivity = directivity if directivity else Omni()
+
+    def __repr__(self):
+        return "Channel({}".format(str(self))
+    
+    def __str__(self):
+        return "({})".format(str(self.directivity))
+
+#class Mono(AbstractReceiver):
+    #"""Mono signal receiver.
+    #"""
+    #pass
+
+#class Stereo(AbstractReceiver):
+    #"""Stereo signal receiver.
+    #"""
+    #pass
+
+#class Custom(AbstractReceiver):
+    #pass
 
 
 class Source(Base):
@@ -612,16 +805,6 @@ class Subsource(Base):
         """Absolute position of subsource.
         """
         return self.source.position + self.position_relative
-
-    #@property
-    #def position_relative(self):
-        #"""Relative position of subsource.
-        #"""
-        #return self._position_relative
-     
-    #@position_relative.setter
-    #def position_relative(self, x):
-        #self._position_relative = x
         
     @property
     def source(self):
@@ -672,10 +855,10 @@ class Subsource(Base):
         
         The signal is the sum of all VirtualSources corrected for directivity.
         """
-        #return np.array([src.signal_using_orientation(orientation) for src in self.virtualsources]).sum(axis=0)
+        #return np.array([src.emission(orientation) for src in self.virtualsources]).sum(axis=0)
         signal = 0.0
         for src in self.virtualsources:
-            signal += src.signal_using_orientation(orientation)
+            signal += src.emission(orientation)
         return signal
         
 
@@ -684,7 +867,7 @@ class Virtualsource(Base):
     Class for modelling specific spectral components within a :class:`Auraliser.SubSource` that have the same directivity.
     """
 
-    def __init__(self, auraliser, name, subsource, rotation=None, directivity=None, gain=0.0, multipole=0):
+    def __init__(self, auraliser, name, subsource, signal=None, rotation=None, directivity=None, gain=0.0, multipole=0):
         """Constructor.
         """
         
@@ -692,6 +875,9 @@ class Virtualsource(Base):
         
         self.subsource = subsource
 
+        if signal is None:
+            self.signal = Noise()
+        
         
         self.directivity = directivity if directivity else Omni()
         """Directivity of the signal.
@@ -706,6 +892,8 @@ class Virtualsource(Base):
         
         self._signal_generated = None
         """Generated signal
+        
+        This value is generated and stored at the beginning of an auralization.
         """
         
         self.multipole = multipole
@@ -715,6 +903,13 @@ class Virtualsource(Base):
         """
     
     _subsource = None
+    
+    
+    @property
+    def position(self):
+        """Position.
+        """
+        return self._subsource.position
     
     @property
     def subsource(self):
@@ -732,14 +927,14 @@ class Virtualsource(Base):
         fs = self.subsource.source._auraliser.sample_frequency
         self._signal_generated = self.signal.output(t, fs)
 
-    def signal_using_orientation(self, orientation):
-        """The signal this :class:`VirtualSource` emits as function of orientation.
+    def emission(self, orientation):
+        """The signal this :class:`Virtualsource` emits as function of orientation.
         
         :param orientation: A vector of cartesian coordinates.
         """
-        mach = np.gradient(self.subsource.position)[0] * self._auraliser.sample_frequency / self._auraliser.atmosphere.soundspeed 
         signal = self._signal_generated * self.directivity.using_cartesian(orientation[:,0], orientation[:,1], orientation[:,2]) * db_to_lin(self.gain)
         if self._auraliser.settings['doppler']['include'] and self._auraliser.settings['doppler']['amplitude']: # Apply change in amplitude.
+            mach = np.gradient(self.subsource.position)[0] * self._auraliser.sample_frequency / self._auraliser.atmosphere.soundspeed 
             signal = auraliser.propagation.apply_doppler_amplitude_using_vectors(signal, mach, orientation, self.multipole)
         return signal
 
@@ -784,8 +979,12 @@ class Geometry(object):
     def render(self):
         """Render the geometry.
         """
-        raise NotImplementedError()
+        return render_geometry(self)
         
+
+
+    
+
 
 
 DEFAULT_SETTINGS = {
@@ -812,17 +1011,75 @@ DEFAULT_SETTINGS = {
         'unique_distances'  :   100,    # Calculate the atmospheric for N amount unique distances.
         },
     'turbulence':{
-        'include'           :   True,   # Include modulations and decorrelation due to atmospheric turbulence.
+        'include'           :   False,   # Include modulations and decorrelation due to atmospheric turbulence.
         'mean_mu_squared'   :   3.0e-6,
-        'correlation_length':   12.0,
-        'saturation'        :   True,
+        'correlation_length':   1.0,
+        'variance_windspeed':   0.03,
+        'saturation'        :   False,
         'amplitude'         :   True,   # Amplitude modulations
         'phase'             :   True,   # Phase modulations
         'spatial_separation':   False,
         'fraction'          :   1,
         'order'             :   1,
         'random_seed'       :   None,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
+        'model'             :   'gaussian',
         },
+    'plot':{
+        'general':{
+            'linewidth'     :   2.0,
+            'markersize'    :   10.0,
+            'marker'        :   '+',
+            'interval'      :   1000,
+            },
+        'sources':{
+            'include'       :   True,
+            'color'         :   'r',
+            },
+        'subsources':{
+            'include'       :   False,
+            'color'         :   'y',
+            },
+        'receivers':{
+            'include'       :   True,
+            'color'         :   'b',
+            },
+        'subreceivers':{
+            'include'       :   False,
+            'color'         :   'g',
+            },
+        'walls':{
+            'include'       :   True,
+            'alpha'         :   0.5,    # Transparancy of walls.
+            'normal'        :   True,   # Show normal vectors.
+            'color'         :   'b',
+            }
+        
+        },
+    'directivity': {
+        'update_resolution' :   100,    # Sample directivity every N samples. Needed for spherical harmonics.
+        },
+        
+        
+        
+        #'receivers' : {
+            #'mono'  :   [
+                #('M', 'Omni', ()),
+                #],
+            #'stereo':   [
+                #('L', 'Cardioid', ()),
+                #('
+                #],
+                       
+                    
+                    #],
+                #}
+            #'stereo' :
+                
+                
+            
+            
+            #}
+    
     }
 """
 Default settings of :class:`Auraliser'.
@@ -830,27 +1087,18 @@ Default settings of :class:`Auraliser'.
 All possible settings are included.
 """
 
-def db_to_lin(db):
-    """
-    Convert gain in dB to linear.
-    """
-    return 10.0**(db/20.0)
+#def render_geometry(geometry):
+    #"""
+    #Render geometry.
+    #"""
+    
+    #fig = plt.figure()
+    #ax = fig.add_subplot(111, projection='3d')
+    #_render_geometry(geometry, ax)
+    #return fig
 
-def lin_to_db(lin):
-    """
-    Convert gain from linear to dB
-    """
-    return 20.0 * np.log10(lin/10.0)
-    
-    
 
-def render_geometry(geometry, filename=None):
-    """
-    Render geometry.
-    """
-    
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
+def _render_geometry(geometry, ax):
     
     polygons = Poly3DCollection( [wall.points for wall in geometry.walls] )
     #polygons.set_color(colors.rgb2hex(sp.rand(3)))
@@ -860,21 +1108,71 @@ def render_geometry(geometry, filename=None):
     #ax.relim() # Does not support Collections!!! So we have to manually set the view limits...
     #ax.autoscale()#_view()
 
-    coordinates = np.array( [wall.points for wall in geometry.walls] ).reshape((-1,3))
-    minimum = coordinates.min(axis=0)
-    maximum = coordinates.max(axis=0)
+    #coordinates = np.array( [wall.points for wall in geometry.walls] ).reshape((-1,3))
+    #minimum = coordinates.min(axis=0)
+    #maximum = coordinates.max(axis=0)
     
-    ax.set_xlim(minimum[0], maximum[0])
-    ax.set_ylim(minimum[1], maximum[1])
-    ax.set_zlim(minimum[2], maximum[2])
+    #ax.set_xlim(minimum[0], maximum[0])
+    #ax.set_ylim(minimum[1], maximum[1])
+    #ax.set_zlim(minimum[2], maximum[2])
+    
+    return ax
+    
 
-    if filename:
-        fig.savefig(filename)
-    else:
-        return fig
+def plot_model(model, **kwargs):
+    """Plot model geometry.
+    """
+    settings = model.settings['plot']
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    
+    # Transducers
+    transducers = ['sources', 'subsources', 'receivers']#, 'subreceivers']
+    
+    def _get_plot_items(obj, attr):
+        return ({'name':item.name, 'position':item.position} for item in getattr(obj, attr))
 
+    data = {sort: _get_plot_items(model, sort) for sort in transducers}
+    
+    for sort in transducers:
+        if settings[sort]['include']:
+            for item in data[sort]:
+                ax.plot(*item['position'][::settings['general']['interval']].T, 
+                        label=item['name'], 
+                        color=settings[sort]['color'],
+                        marker=settings['general']['marker'],
+                        markersize=settings['general']['markersize']
+                        )
+    
+    # Walls
+    ax = _render_geometry(model.geometry, ax)
+    
+    ax.set_title('Overview')
+    ax.set_xlabel(r'$x$ in m')
+    ax.set_ylabel(r'$y$ in m')
+    ax.set_zlabel(r'$z$ in m')
 
+    #ax.relim()
+
+    ## Sources
+    #for src in model.sources:
+        #if sources:
+            #ax.plot(*src.position[::interval].T, label=src.name, color='r', marker='+', markersize=markersize, linewidth=linewidth)
+        #if subsources:
+            #for subsrc in src.subsources:
+                #ax.plot(*subsrc.position[::interval].T, label=subsrc.name, color='y', markersize=markersize, linewidth=linewidth)
+        
+    ## Receivers
+    #for rcv in model.receivers:
+        #if receivers:
+            #ax.plot(*rcv.position[::interval].T, label=rcv.name, color='r', markersize=markersize, linewidth=linewidth)
+        #if subreceivers:
+            #for subsrc in rcv.subreceivers:
+                #ax.plot(*subrcv.position[::interval].T, label=subrcv.name, color='y', markersize=markersize, linewidth=linewidth)
+    
+    # Walls
     
     
-    
+    return fig
     
