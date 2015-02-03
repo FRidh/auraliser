@@ -1,5 +1,8 @@
 """
 Module with functions and classes for outdoor acoustics.
+
+DEPRECTATED!!!!
+
 """
 
 import numpy as np
@@ -319,7 +322,7 @@ class Model(object):
         fig.savefig(filename)
 
 
-class Geometry(object):
+class GeometryCalculations(object):
     """
     Class describing a geometry.
     """

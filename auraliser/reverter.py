@@ -50,10 +50,15 @@ class Reverter(object):
                                                     self.atmosphere,
                                                     distance,
                                                     taps=self.settings['atmospheric_absorption']['taps'],
-                                                    n_d=self.settings['atmospheric_absorption']['unique_distances']
+                                                    n_distances=self.settings['atmospheric_absorption']['unique_distances']
                                                     )[0:samples]
         if self.settings['doppler']['include'] and self.settings['doppler']['frequency']:
             delay = distance / self.atmosphere.soundspeed
             signal = unapply_doppler(signal, delay, fs)
+           
+            if self.settings['doppler']['purge_zeros']:
+                delay = int(distance[-1]/self.atmosphere.soundspeed * fs)
+                signal = signal[0:len(signal)-delay]
+        
         
         return Signal(signal, fs)

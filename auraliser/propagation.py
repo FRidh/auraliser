@@ -20,7 +20,7 @@ finally:
     from ._fftconvolve import fftconvolve1D
 from acoustics.signal import Filterbank, OctaveBand, convolve
 #from turbulence_jens import map_source_to_receiver
-from .Base import norm
+from .tools import norm
 from scipy.special import gamma
 from scipy.special import kv as besselk
 from scipy.integrate import cumtrapz
@@ -558,12 +558,20 @@ def apply_turbulence_gaussian(signal, fs, mean_mu_squared, r, L, rho, soundspeed
     return signals.sum(axis=0)
 
     
-def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, taps, N, n_d):
-    """
-    Apply or unapply atmospheric absorption depending on sign.
+def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, taps, N, n_distances=None):
+    """Apply or unapply atmospheric absorption depending on sign.
+    
+    :param signal: Signal
+    :param fs: Sample frequency
+    :param atmosphere: Atmosphere
+    :param distance: Distance
+    :param taps: Amount of filter taps to keep.
+    :param N: Blocks to use for performing the FFT. Determines frequency resolution.
+    :param n_distances: Amount of unique distances to consider.
+    
     """    
-    if n_d is not None:
-        d_ir = np.linspace(distance.min(), distance.max(), n_d, endpoint=True)   # Distances to check
+    if n_distances is not None:
+        d_ir = np.linspace(distance.min(), distance.max(), n_distances, endpoint=True)   # Distances to check
         
         start = (N-taps)//2
         stop = (N+taps)//2 - 1
@@ -578,7 +586,7 @@ def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, taps, N, n_d
     return convolve(signal, ir)
     
     
-def apply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2048, n_d=None):
+def apply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2048, n_distances=None):
     """
     Apply atmospheric absorption to ``signal``.
     
@@ -588,12 +596,12 @@ def apply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2
     :param distance: Distance
     :param taps: Amount of filter taps to keep.
     :param N: Blocks to use for performing the FFT. Determines frequency resolution.
-    :param n_d: Amount of unique distances to consider.
+    :param n_distances: Amount of unique distances to consider.
     """
-    return _atmospheric_absorption(signal, fs, atmosphere, distance, +1, taps, N, n_d)
+    return _atmospheric_absorption(signal, fs, atmosphere, distance, +1, taps, N, n_distances)
     
     
-def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2048, n_d=None):
+def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2048, n_distances=None):
     """
     Unapply atmospheric absorption to `signal`.
     
@@ -603,6 +611,6 @@ def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N
     :param distance: Distance
     :param taps: Amount of filter taps to keep.
     :param N: Blocks to use for performing the FFT. Determines frequency resolution.
-    :param n_ir: Value between 0 and 1 representing the percentage of unique impulse responses to use.
+    :param n_distances: Amount of unique distances to consider.
     """
-    return _atmospheric_absorption(signal, fs, atmosphere, distance, -1, taps, N, n_d)
+    return _atmospheric_absorption(signal, fs, atmosphere, distance, -1, taps, N, n_distances)
