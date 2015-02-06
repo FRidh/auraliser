@@ -49,7 +49,7 @@ class Reverter(object):
                                                     fs,
                                                     self.atmosphere,
                                                     distance,
-                                                    taps=self.settings['atmospheric_absorption']['taps'],
+                                                    n_blocks=self.settings['atmospheric_absorption']['taps'],
                                                     n_distances=self.settings['atmospheric_absorption']['unique_distances']
                                                     )[0:samples]
         if self.settings['doppler']['include'] and self.settings['doppler']['frequency']:

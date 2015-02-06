@@ -401,14 +401,13 @@ def _apply_source_effects(mirror, subsource, settings, samples, fs, atmosphere):
     # Apply correct source strength due to reflections.
     if not settings['reflections']['force_hard'] and not np.all(mirror.strength == 1.0): # Save computations, for direct source there is no need.
 
-            print(mirror.strength.shape)
-            print(signal.shape)
-            print(resolution)
+            #print(mirror.strength.shape)
+            #print(signal.shape)
+            #print(resolution)
 
-            into('strength.csv', mirror.strength)
+            #into('strength.csv', mirror.strength)
             
-            #signal = convolve(signal, auraliser.propagation.ir_real_signal(np.repeat(mirror.strength, resolution, axis=0), settings['reflections']['taps']).T)[0:samples]
-            signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_real_signal(mirror.strength)[:,0:settings['reflections']['taps']]), resolution, axis=0)[0:samples].T)[0:samples]
+            signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_real_signal(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
             
             # We cannot yet delete the strength of the object since a child mirror source might need it.
             # Same for the position, as the child needs to know it for the directivity.
@@ -552,7 +551,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                               fs,
                                               atmosphere,
                                               distance,
-                                              taps=settings['atmospheric_absorption']['taps'],
+                                              n_blocks=settings['atmospheric_absorption']['taps'],
                                               n_distances=settings['atmospheric_absorption']['unique_distances']
                                               )[0:samples]
 
@@ -981,7 +980,7 @@ DEFAULT_SETTINGS = {
         'mirrors_threshold' :   2,      # Maximum amount of mirrors to include
         'order_threshold'   :   3,      # Maximum order of reflections
         'update_resolution' :   100,    # Update effectiveness every N samples.
-        'taps'              :   128,     # Amount of filter taps for ifft mirror strength.
+        'taps'              :   256,     # Amount of filter taps for ifft mirror strength.
         'force_hard'        :   False,  # Force hard reflections.
         },
     'doppler':{
@@ -995,8 +994,8 @@ DEFAULT_SETTINGS = {
         },
     'atmospheric_absorption':{
         'include'           :   True,   # Include atmospheric absorption
-        'taps'              :   128,     # Amount of filter taps for ifft 
-        'unique_distances'  :   100,    # Calculate the atmospheric for N amount unique distances.
+        'taps'              :   256,    # Amount of filter blocks to use for ifft
+        'unique_distances'  :   50,    # Calculate the atmospheric for N amount unique distances.
         },
     'turbulence':{
         'include'           :   False,  # Include modulations and decorrelation due to atmospheric turbulence.

@@ -26,16 +26,33 @@ from scipy.special import kv as besselk
 from scipy.integrate import cumtrapz
 
 
-def ir_real_signal(tf, N=None):
+def ir_real_signal(spectrum, n_blocks):
     """Take a single-sided spectrum `tf` and convert it to an impulse response of `N` samples.
     
-    :param tf: Single-sided spectrum.
-    :param N: Amount of samples to use for the impulse response.
+    :param spectrum: Single-sided spectrum real.
+    :param n_blocks: Amount of samples to use for the impulse response.
     
     .. note:: This function should work for multiple tf's in one array.
     
     """
-    return np.fft.ifftshift(irfft(tf, n=N)).real
+    return np.fft.ifftshift(irfft(spectrum, n=n_blocks)).real
+
+    #n_frequencies = len(spectrum)
+    #tf = np.hstack( (spectrum, np.conj(spectrum[::-1])) )
+    #ir = ifft( tf, n=n_blocks )
+    #ir = np.hstack((ir[:, n_blocks/2:n_blocks], ir[:, 0:n_blocks/2]))
+    #return ir.real
+    
+    ## Transfer function needs to be complex, and same size. Complex?? Mehh
+    #tf = np.zeros((len(distances), len(f)), dtype='float64')
+    ## Calculate the actual transfer function.    
+    #tf += 10.0**( float(sign) * distances.reshape((-1,1)) * self.attenuation_coefficient(f) / 20.0  )
+    ## Positive frequencies first, and then mirrored the conjugate negative frequencies.
+    #tf = np.hstack( (tf, np.conj(tf[::-1, :]))) 
+    
+
+    
+    
 
 
 def apply_spherical_spreading(signal, distance):
@@ -145,8 +162,6 @@ def apply_delay_turbulence(signal, delay, fs):
     kf = np.floor(k).astype(int)       # Floor the warped indices. Convert to integers so we can use them as indices.   
     dk = kf - k
     ko = np.copy(kf)
-    #print(ko)
-    #kf %= len(kf)-1
     kf[ko<0] = 0
     kf[ko+1>=len(ko)] = 0
     R = ( (1.0 + dk) * signal[kf] + (-dk) * signal[kf+1] ) * (ko >= 0) * (ko+1 < len(k)) #+ 0.0 * (kf<0)
@@ -216,28 +231,28 @@ def unapply_doppler_amplitude(signal, mach, angle, multipole):
 
 from turbulence.vonkarman import covariance_wind as covariance_von_karman
 
-#def covariance_von_karman(f, c0, rho, distance, L, Cv, steps=20, initial=0.001):
+#def covariance_von_karman(f, c0, spatial_separation, distance, scale, Cv, steps=20, initial=0.001):
     #"""Covariance. Wind fluctuations only.
     
     #:param f: Frequency
     #:param c0: Speed of sound
-    #:param rho: Spatia separation
+    #:param spatial_separation: Spatia separation
     #:param distance: Distance
-    #:param L: Correlation length
+    #:param scale: Correlation length
     #:param Cv: Variance of wind speed
     #:param initial: Initial value
     
     
     #"""
     #k = 2.0*np.pi*f / c0
-    #K0 = 2.0*np.pi / L
+    #K0 = 2.0*np.pi / scale
     
     #A = 5.0/(18.0*np.pi*gamma(1./3.)) # Equation 11, see text below. Approximate result is 0.033
     #gamma_v = 3./10.*np.pi**2.*A*k**2.*K0**(-5./3.)*4.*(Cv/c0)**2.  # Equation 28, only wind fluctuations
 
-    #krho = k * rho
+    #kspatial_separation = k * spatial_separation
     
-    #t = krho[:,None] * np.linspace(0.00000000001, 1., steps) # Fine discretization for integration
+    #t = kspatial_separation[:,None] * np.linspace(0.00000000001, 1., steps) # Fine discretization for integration
 
     ##t[t==0.0] = 1.e-20
 
@@ -245,7 +260,7 @@ from turbulence.vonkarman import covariance_wind as covariance_von_karman
     
     ##print(   cumtrapz((2.0**(1./6.)*t**(5./6.)/gamma(5./6.) * (besselk(5./6., t) - t/2.0*besselk(1./6., t)) ), initial=initial)[:,-1]  )
     
-    #B = 2.0*gamma_v * distance / krho * cumtrapz((2.0**(1./6.)*t**(5./6.)/gamma(5./6.) * (besselk(5./6., t) - t/2.0*besselk(1./6., t)) ), initial=initial)[:,-1]
+    #B = 2.0*gamma_v * distance / kspatial_separation * cumtrapz((2.0**(1./6.)*t**(5./6.)/gamma(5./6.) * (besselk(5./6., t) - t/2.0*besselk(1./6., t)) ), initial=initial)[:,-1]
     #return B
 
 
@@ -278,10 +293,10 @@ def _spatial_separation(A, B, C):
     #print(a, b, c)
     gamma = np.arccos((a**2.0+b**2.0-c**2.0) / (2.0*a*b))
     #print(gamma)
-    #rho = 2.0 * b * np.sin(gamma/2.0)
-    rho = 2.0 * a * np.tan(gamma/2.0)
+    #spatial_separation = 2.0 * b * np.sin(gamma/2.0)
+    spatial_separation = 2.0 * a * np.tan(gamma/2.0)
     dr = a - b
-    return rho, dr
+    return spatial_separation, dr
 
 
 from scipy.signal import fftconvolve, butter, filtfilt
@@ -293,26 +308,26 @@ def moving_average(a, n=3) :
 
 
 
-def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, L, rho, Cv, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
+def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, scale, spatial_separation, Cv, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
     
     #cutoff = fs/2.0 * 0.3
     #signal = lowpass(signal, fs, cutoff)
     
-    #rho /= 1000000.0
+    #spatial_separation /= 1000000.0
     
-    #print(len(rho))
+    #print(len(spatial_separation))
     #n = 2000
-    #rho = moving_average(rho, n=n) 
-    #rho = np.hstack((rho, np.ones(n-1)*rho[-1]))
-    #print(len(rho))
+    #spatial_separation = moving_average(spatial_separation, n=n) 
+    #spatial_separation = np.hstack((spatial_separation, np.ones(n-1)*spatial_separation[-1]))
+    #print(len(spatial_separation))
     
-    #print(rho)
-    #rho = np.abs( np.random.randn(len(signal)) * 0.0001 )
-    #print(rho)
+    #print(spatial_separation)
+    #spatial_separation = np.abs( np.random.randn(len(signal)) * 0.0001 )
+    #print(spatial_separation)
     
-    f0 = 10.0
+    modulation_frequencies = 10.0
     samples = len(signal)
-    B = covariance_von_karman(f0, soundspeed, rho, r, L, Cv, steps=50)
+    B = covariance_von_karman(modulation_frequencies, soundspeed, spatial_separation, r, scale, Cv, steps=50)
     auto = np.abs(fft(B))#, n=samples))).real # Autospectrum, however, still double-sided
     ir = np.fft.ifftshift((ifft(np.sqrt(auto)).real), axes=-1) #
     ir *= 2.0
@@ -337,19 +352,19 @@ def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, L, rho, Cv, sound
     if include_phase:
         n2 = np.random.randn(n)
         phase = fftconvolve(n2, ir, mode='valid')
-        delay = phase/(2.0*np.pi*f0)
+        delay = phase/(2.0*np.pi*modulation_frequencies)
         signal = apply_delay_turbulence(signal, delay, fs)
     return signal
 
-#def apply_turbulence(signal, fs, mean_mu_squared, r, L, rho, Cv, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
+#def apply_turbulence(signal, fs, mean_mu_squared, r, scale, spatial_separation, Cv, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
     #"""Apply turbulence to signal.
     
     #:param signal: Original signal
     #:param fs: Sample frequency
     #:param mean_mu_squared: Dynamic refractive index squared.
     #:param r: Distance.
-    #:param L: Correlation length / Outer length scale.
-    #:param rho: Spatial separation.
+    #:param scale: Correlation length / Outer length scale.
+    #:param spatial_separation: Spatial separation.
     #:param soundspeed: Speed of sound.
     #:param fraction: Fraction of octaves.
     #:param order: Order of bandpass filters.
@@ -367,10 +382,10 @@ def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, L, rho, Cv, sound
     #fb = Filterbank(ob, sample_frequency=fs, order=order)
     
     ## Modulation frequencies.
-    #f0 = ob.center
+    #modulation_frequencies = ob.center
     
     ## Amount of signals.
-    #N = len(f0)
+    #N = len(modulation_frequencies)
 
     ## Bandpass filtered input signal.
     #signals = np.empty((N, samples), dtype='float64')
@@ -378,17 +393,17 @@ def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, L, rho, Cv, sound
         #signals[i,:] = s
     #del signal#del ob, fb
     ## Wavenumber
-    #k = 2.0 * np.pi * f0 / soundspeed
+    #k = 2.0 * np.pi * modulation_frequencies / soundspeed
         
     ## Calculate correlation
     #B = np.empty_like(signals)
     #for i, f in enumerate(ob.center):
-        #B[i,:] = covariance_von_karman(f, soundspeed, rho, r, L, Cv)
-    ##B = covariance_von_karman(ob.center, soundspeed, rho, r, L, Cv)
+        #B[i,:] = covariance_von_karman(f, soundspeed, spatial_separation, r, L, Cv)
+    ##B = covariance_von_karman(ob.center, soundspeed, spatial_separation, r, L, Cv)
     
     ##print(B)
-    ##B += (rho!=0.0) * np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (k*k)[:,None] * r[None,:] * L * (erf(rho/L) / (rho/L))[None,:] ) ) 
-    ##B += (rho==0.0) * np.sqrt(np.pi)/2.0 * mean_mu_squared * (k*k)[:,None]* r[None,:] * L
+    ##B += (spatial_separation!=0.0) * np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (k*k)[:,None] * r[None,:] * L * (erf(spatial_separation/L) / (spatial_separation/L))[None,:] ) ) 
+    ##B += (spatial_separation==0.0) * np.sqrt(np.pi)/2.0 * mean_mu_squared * (k*k)[:,None]* r[None,:] * L
     #np.save("B.npy", B)
     ## Seed random numbers generator.
     #np.random.seed(seed)
@@ -397,7 +412,7 @@ def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, L, rho, Cv, sound
 
     ## Autospectrum of correlation.
     #auto = np.abs(fft(B))#, n=samples))).real # Autospectrum, however, still double-sided
-    #del B, rho
+    #del B, spatial_separation
     
     #np.save("auto.npy", auto)
 
@@ -440,7 +455,7 @@ def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, L, rho, Cv, sound
         ##phase = fftconvolve1D(n2, ir[:,n/2-50:n/2+50], mode='same')
         #del n2, ir
         ## Apply fluctuations
-        #delay = phase/(2.0*np.pi*f0)[:,None]
+        #delay = phase/(2.0*np.pi*modulation_frequencies)[:,None]
         #print(delay.max())
         #print(delay.min())
         #for i in range(N):
@@ -451,15 +466,19 @@ def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, L, rho, Cv, sound
     #return signals.sum(axis=0)
     
 
-def apply_turbulence_gaussian(signal, fs, mean_mu_squared, r, L, rho, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
+def apply_turbulence_gaussian(signal, fs, mean_mu_squared, distance, scale, 
+                              spatial_separation, soundspeed=343.0, 
+                              fraction=3, order=1, include_saturation=True, 
+                              include_amplitude=True, include_phase=True, 
+                              seed=None):
     """Apply turbulence to signal.
     
     :param signal: Original signal
     :param fs: Sample frequency
     :param mean_mu_squared: Dynamic refractive index squared.
-    :param r: Distance.
-    :param L: Correlation length / Outer length scale.
-    :param rho: Spatial separation.
+    :param distance: Distance.
+    :param scale: Correlation length / Outer length scale.
+    :param spatial_separation: Spatial separation.
     :param soundspeed: Speed of sound.
     :param fraction: Fraction of octaves.
     :param order: Order of bandpass filters.
@@ -467,126 +486,129 @@ def apply_turbulence_gaussian(signal, fs, mean_mu_squared, r, L, rho, soundspeed
     :param include_amplitude: Include amplitude modulations.
     :param include_phase: Include phase modulations.
     :param seed: Seed for random number generator.
+    :returns: The original signal but with fluctuations applied to it.
     
     """
     samples = len(signal)
-    ob = OctaveBand(fstart=5.0, fstop=fs/2., fraction=fraction)
     
-    nyq = fs/2.0
+    # All fraction octaves band in range
+    bands = OctaveBand(fstart=5.0, fstop=fs/2., fraction=fraction) 
     
-    if (ob.upper >= nyq).any():
-        index = np.where( ob.upper < nyq)[0].max()
-        ob = OctaveBand(fstart=5.0, fstop=ob.center[index], fraction=fraction) 
+    nyq = fs/2.0 # Nyquist frequency
     
-    fb = Filterbank(ob, sample_frequency=fs, order=order)
+    # Assure cornerfrequencies of the fractional-octaves are below the Nyquist frequency
+    if (bands.upper >= nyq).any():
+        index = np.where( bands.upper < nyq)[0].max()
+        bands = OctaveBand(fstart=5.0, fstop=bands.center[index], fraction=fraction) 
+    
+    filterbank = Filterbank(bands, sample_frequency=fs, order=order)
     
     # Modulation frequencies.
-    f0 = ob.center
-    
-    #print(ob.upper)
-    #print(fs)
+    modulation_frequencies = bands.center
     
     # Amount of signals.
-    N = len(f0)
+    n_signals = len(modulation_frequencies)
 
     # Bandpass filtered input signal.
-    signals = np.empty((N, samples), dtype='float64')
-    for i, s in enumerate(fb.filtfilt(signal)):
-        signals[i,:] = s
-    del signal, ob, fb
-    # Wavenumber
-    k = 2.0 * np.pi * f0 / soundspeed
-        
-    # Calculate correlation
-    B = np.zeros_like(signals)
-    B += (rho!=0.0) * np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (k*k)[:,None] * r[None,:] * L * (erf(rho/L) / (rho/L))[None,:] ) ) 
-    B += (rho==0.0) * np.sqrt(np.pi)/2.0 * mean_mu_squared * (k*k)[:,None]* r[None,:] * L
-    np.save("B.npy", B)
-    # Seed random numbers generator.
-    np.random.seed(seed)
-    n = samples * 2 - 1
-
-    # Autospectrum of correlation.
-    auto = np.abs(fft(B))#, n=samples))).real # Autospectrum, however, still double-sided
-    del B, rho
+    signals = np.empty((n_signals, samples), dtype='float64')
+    for i, signal_i in enumerate(filterbank.filtfilt(signal)):
+        signals[i,:] = signal_i
     
-    np.save("auto.npy", auto)
-
+    del signal, bands, filterbank
+    
+    # Wavenumber
+    k = 2.0 * np.pi * modulation_frequencies / soundspeed
+        
+    # Calculate covariance
+    covariance = np.zeros_like(signals)
+    
+    covariance += (spatial_separation!=0.0) * \
+                  np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (k*k)[:,None] * \
+                  distance[None,:] * scale * (erf(spatial_separation/scale) / \
+                  (spatial_separation/scale))[None,:] ) ) 
+              
+    covariance += (spatial_separation==0.0) * np.sqrt(np.pi)/2.0 * \
+                  mean_mu_squared * (k*k)[:,None]* distance[None,:] * scale
+    
+    # Autospectrum of correlation.
+    auto = np.abs(fft(covariance)) # Autospectrum, however, still double-sided
+    del covariance, spatial_separation
 
     # The autospectrum is real-valued. Taking the inverse DFT results in complex and symmetric values."""
     ir = np.fft.ifftshift((ifft(np.sqrt(auto)).real), axes=-1) #
     ir = 2.0 * ir[:, 0:samples] # Only take half the IR to have right amount of samples.
     
-    #ir *= np.hanning(ir.shape[-1])[None,:]
-    #ir[0] /= 2.0
     del auto
-    np.save("ir.npy", ir)
+    
+    # Seed random numbers generator.
+    np.random.seed(seed)
+    
+    # Amount of noise samples required for the convolution
+    n_noise_samples = samples * 2 - 1
     
     if include_amplitude:
         # Generate random numbers.
-        #n1 = np.random.randn(n)
-        #n1 = np.tile(n1, (N,1))
-        n1 = np.random.randn(N,n)
+        noise = np.random.randn( n_noise_samples)
+        noise = np.tile(noise, (n_signals, 1))
         
-        log_amplitude = fftconvolve1D(n1, ir, mode='valid') # Log-amplitude fluctuations
-        del n1
+        # Log-amplitude fluctuations. Convolution of noise with impulse response
+        log_amplitude = fftconvolve1D(noise, ir, mode='valid')
+        del noise
+        
         if not include_phase:
             del ir
+        
         # Apply amplitude saturation
         if include_saturation:
-            saturation_distance = 1.0 / (2.0 * mean_mu_squared * k*k * L)
+            saturation_distance = 1.0 / (2.0 * mean_mu_squared * k*k * scale)
             log_amplitude *=  np.sqrt( 1.0 / (1.0 + r[None,:]/saturation_distance[:,None]) )
             del saturation_distance
+        
         # Apply fluctuations
         signals *= np.exp(log_amplitude)
         del log_amplitude
         
     if include_phase:
         # Generate random numbers.
-        #n2 = np.random.randn(n)
-        #n2 = np.tile(n2, (N,1))
-        n2 = np.random.randn(N,n)
-        phase = fftconvolve1D(n2, ir, mode='valid')           # Phase fluctuations
-        del n2, ir
+        noise = np.random.randn( n_noise_samples)
+        noise = np.tile(noise, (n_signals, 1))
+        phase = fftconvolve1D(noise, ir, mode='valid')           # Phase fluctuations
+        del noise, ir
         # Apply fluctuations
-        delay = phase/(2.0*np.pi*f0)[:,None]
-        for i in range(N):
-            signals[i] = apply_delay_turbulence(signals[i], delay[i], fs)
-            #signals[i] = map_source_to_receiver(signals[i], delay[i], fs)
+        delay = phase/(2.0*np.pi*modulation_frequencies)[:,None]
+        for i in range(n_signals):
+            # Apply delay by resampling the signal. Uses linear interpolation.
+            signals[i] = apply_delay_turbulence(signals[i], delay[i], fs) 
         del delay
         
-    return signals.sum(axis=0)
+    return signals.sum(axis=0) # Sum over the contribution of every band
 
     
-def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, taps, N, n_distances=None):
+def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, n_blocks, n_distances=None):
     """Apply or unapply atmospheric absorption depending on sign.
     
     :param signal: Signal
     :param fs: Sample frequency
     :param atmosphere: Atmosphere
     :param distance: Distance
-    :param taps: Amount of filter taps to keep.
-    :param N: Blocks to use for performing the FFT. Determines frequency resolution.
+    :param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
     :param n_distances: Amount of unique distances to consider.
     
-    """    
+    """
     if n_distances is not None:
-        d_ir = np.linspace(distance.min(), distance.max(), n_distances, endpoint=True)   # Distances to check
+        distances = np.linspace(distance.min(), distance.max(), n_distances, endpoint=True)   # Distances to check
+
+        ir_i = atmosphere.ir_attenuation_coefficient(distances=distances, n_blocks=n_blocks, fs=fs, sign=sign)#[start:stop+1, :]
         
-        start = (N-taps)//2
-        stop = (N+taps)//2 - 1
-        
-        ir_i = atmosphere.ir_attenuation_coefficient(d=d_ir, N=N, fs=fs, sign=sign)[start:stop+1, :]
-        
-        indices = np.argmin(np.abs(distance.reshape(-1,1) - d_ir), axis=1)
+        indices = np.argmin(np.abs(distance.reshape(-1,1) - distances), axis=1)
         ir = ir_i[:, indices]
         
     else:
-        ir = atmosphere.ir_attenuation_coefficient(d=distance, N=N, fs=fs, sign=sign)[0:taps,:]
+        ir = atmosphere.ir_attenuation_coefficient(distances=distance, n_blocks=n_blocks, fs=fs, sign=sign)#[0:n_blocks,:]
     return convolve(signal, ir)
     
     
-def apply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2048, n_distances=None):
+def apply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=128, n_distances=None):
     """
     Apply atmospheric absorption to ``signal``.
     
@@ -594,14 +616,13 @@ def apply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2
     :param fs: Sample frequency
     :param atmosphere: Atmosphere
     :param distance: Distance
-    :param taps: Amount of filter taps to keep.
-    :param N: Blocks to use for performing the FFT. Determines frequency resolution.
+    :param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
     :param n_distances: Amount of unique distances to consider.
     """
-    return _atmospheric_absorption(signal, fs, atmosphere, distance, +1, taps, N, n_distances)
+    return _atmospheric_absorption(signal, fs, atmosphere, distance, -1, n_blocks, n_distances)
     
     
-def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N=2048, n_distances=None):
+def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=128, n_distances=None):
     """
     Unapply atmospheric absorption to `signal`.
     
@@ -609,8 +630,7 @@ def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, taps=128, N
     :param fs: Sample frequency
     :param atmosphere: Atmosphere
     :param distance: Distance
-    :param taps: Amount of filter taps to keep.
-    :param N: Blocks to use for performing the FFT. Determines frequency resolution.
+    :param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
     :param n_distances: Amount of unique distances to consider.
     """
-    return _atmospheric_absorption(signal, fs, atmosphere, distance, -1, taps, N, n_distances)
+    return _atmospheric_absorption(signal, fs, atmosphere, distance, +1, n_blocks, n_distances)
