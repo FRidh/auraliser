@@ -39,6 +39,9 @@ def test_atmospheric_attenuation(fs, frequency):
 
     signal_difference = signal.leq() - out.leq()
     
+    # Assert we have attenuation by testing.
+    assert( signal_difference > 0.0 )
+    
     assert( np.abs(signal_difference - attenuation) < 1.0)
 
 
@@ -99,6 +102,9 @@ def test_atmospheric_attenuation_varying_distance(duration):
     attenuation = atmosphere.attenuation_coefficient(frequency) * distance
 
     signal_difference = signal.leq() - out.leq()
+        
+    # Assert we have attenuation by testing.
+    assert( signal_difference > 0.0 )
     
     assert( np.all( np.abs(signal_difference - attenuation) < 1.0) )
     

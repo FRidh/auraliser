@@ -26,33 +26,30 @@ from scipy.special import kv as besselk
 from scipy.integrate import cumtrapz
 
 
-def ir_real_signal(spectrum, n_blocks):
-    """Take a single-sided spectrum `tf` and convert it to an impulse response of `N` samples.
+#def ir_real_signal(spectrum, n_blocks=None):
+    #"""Take a single-sided spectrum `tf` and convert it to an impulse response of `N` samples.
     
-    :param spectrum: Single-sided spectrum real.
-    :param n_blocks: Amount of samples to use for the impulse response.
+    #:param spectrum: Single-sided spectrum real.
+    #:param n_blocks: Amount of blocks to use for the FFT and thus IR taps.
     
-    .. note:: This function should work for multiple tf's in one array.
+    #.. note:: This function should work for multiple tf's in one array. In the input every row is a spectrum. In the output every row is an IR.
     
+    #"""
+    #spectrum = np.hstack((spectrum, spectrum[..., 1::-1]))
+    #return np.fft.ifftshift(np.fft.ifft(spectrum, n=n_blocks), axes=0).real
+
+
+def ir_reflection(spectrum, n_blocks=None):
+    """Complex single-sided spectrum to real impulse response.
     """
-    return np.fft.ifftshift(irfft(spectrum, n=n_blocks)).real
+    spectrum = np.hstack((spectrum, spectrum[..., 0::-1]))
+    return np.fft.ifftshift(np.fft.ifft(spectrum, n=n_blocks), axes=1).real
 
-    #n_frequencies = len(spectrum)
-    #tf = np.hstack( (spectrum, np.conj(spectrum[::-1])) )
-    #ir = ifft( tf, n=n_blocks )
-    #ir = np.hstack((ir[:, n_blocks/2:n_blocks], ir[:, 0:n_blocks/2]))
-    #return ir.real
-    
-    ## Transfer function needs to be complex, and same size. Complex?? Mehh
-    #tf = np.zeros((len(distances), len(f)), dtype='float64')
-    ## Calculate the actual transfer function.    
-    #tf += 10.0**( float(sign) * distances.reshape((-1,1)) * self.attenuation_coefficient(f) / 20.0  )
-    ## Positive frequencies first, and then mirrored the conjugate negative frequencies.
-    #tf = np.hstack( (tf, np.conj(tf[::-1, :]))) 
-    
-
-    
-    
+def ir_atmosphere(spectrum, n_blocks=None):
+    """Real single-sided spectrum to real impulse response.
+    """
+    spectrum = np.hstack((spectrum, spectrum[..., 0::-1])) # Apparently not needed since doesn't make any difference.
+    return np.fft.ifftshift(np.fft.ifft(spectrum, n=n_blocks), axes=1).real
 
 
 def apply_spherical_spreading(signal, distance):
@@ -584,6 +581,25 @@ def apply_turbulence_gaussian(signal, fs, mean_mu_squared, distance, scale,
     return signals.sum(axis=0) # Sum over the contribution of every band
 
     
+    
+def _ir_attenuation_coefficient(atmosphere, distances, fs=44100.0, n_blocks=2048, sign=-1):
+    """
+    Calculate the impulse response due to air absorption.
+    
+    :param fs: Sample frequency
+    :param distances: Distances
+    :param blocks: Blocks
+    :param sign: Multiply (+1) or divide (-1) by transfer function. Multiplication is used for applying the absorption while -1 is used for undoing the absorption.
+    """ 
+    distances = np.atleast_1d(distances)
+    f = np.fft.fftfreq(n_blocks, 1./fs)
+
+    tf = np.zeros((len(distances), len(f)), dtype='float64')                          # Transfer function needs to be complex, and same size.
+    tf += 10.0**( float(sign) * distances[:,None] * atmosphere.attenuation_coefficient(f) / 20.0  )  # Calculate the actual transfer function.
+       
+    return ir_atmosphere(tf, n_blocks=n_blocks)
+
+    
 def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, n_blocks, n_distances=None):
     """Apply or unapply atmospheric absorption depending on sign.
     
@@ -598,14 +614,15 @@ def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, n_blocks, n_
     if n_distances is not None:
         distances = np.linspace(distance.min(), distance.max(), n_distances, endpoint=True)   # Distances to check
 
-        ir_i = atmosphere.ir_attenuation_coefficient(distances=distances, n_blocks=n_blocks, fs=fs, sign=sign)#[start:stop+1, :]
+        # Every row is an impulse response.
+        ir_i = _ir_attenuation_coefficient(atmosphere, distances=distances, n_blocks=n_blocks, fs=fs, sign=sign)#[start:stop+1, :]
         
-        indices = np.argmin(np.abs(distance.reshape(-1,1) - distances), axis=1)
-        ir = ir_i[:, indices]
-        
+        # Get the IR of the distance closest by
+        indices = np.argmin(np.abs(distance[:,None] - distances), axis=1)
+        ir = ir_i[indices, :]
     else:
-        ir = atmosphere.ir_attenuation_coefficient(distances=distance, n_blocks=n_blocks, fs=fs, sign=sign)#[0:n_blocks,:]
-    return convolve(signal, ir)
+        ir = _ir_attenuation_coefficient(atmosphere, distances=distance, n_blocks=n_blocks, fs=fs, sign=sign)
+    return convolve(signal, ir.T)
     
     
 def apply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=128, n_distances=None):

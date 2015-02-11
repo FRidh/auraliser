@@ -420,13 +420,7 @@ def _apply_source_effects(mirror, subsource, settings, samples, fs, atmosphere):
     # Apply correct source strength due to reflections.
     if not settings['reflections']['force_hard'] and not np.all(mirror.strength == 1.0): # Save computations, for direct source there is no need.
 
-            #print(mirror.strength.shape)
-            #print(signal.shape)
-            #print(resolution)
-
-            #into('strength.csv', mirror.strength)
-            
-            signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_real_signal(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
+            signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_reflection(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
             
             # We cannot yet delete the strength of the object since a child mirror source might need it.
             # Same for the position, as the child needs to know it for the directivity.
@@ -578,8 +572,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     if settings['spreading']['include']:
         logging.info("Applying spherical spreading.")
         signal = auraliser.propagation.apply_spherical_spreading(signal, distance)
-    
-    
+
     # Force zeros until first real sample arrives. Should only be done when the time delay (Doppler) is applied.
     if settings['doppler']['include'] and settings['doppler']['frequency']:
         initial_delay = int(distance[0]/atmosphere.soundspeed * fs)
@@ -587,7 +580,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
             signal = signal[initial_delay:]
         else:
             signal[0:initial_delay] = 0.0
-    
+            
     return signal
     
 
@@ -1014,7 +1007,7 @@ DEFAULT_SETTINGS = {
     'atmospheric_absorption':{
         'include'           :   True,   # Include atmospheric absorption
         'taps'              :   256,    # Amount of filter blocks to use for ifft
-        'unique_distances'  :   50,    # Calculate the atmospheric for N amount unique distances.
+        'unique_distances'  :   100,    # Calculate the atmospheric for N amount unique distances.
         },
     'turbulence':{
         'include'           :   False,  # Include modulations and decorrelation due to atmospheric turbulence.
