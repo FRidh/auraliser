@@ -46,6 +46,23 @@ from .tools import norm, unit_vector
 
 from into import into
 
+import collections
+
+def recursive_mapping_update(d, u):
+    """Recursively update a mapping/dict.
+    
+    :param d: Target mapping.
+    :param u: Source mapping.
+    
+    """
+    for k, v in u.items():
+        if isinstance(v, collections.Mapping):
+            r = recursive_mapping_update(d.get(k, {}), v)
+            d[k] = r
+        else:
+            d[k] = u[k]
+    return d
+
 
 def position_for_directivity(mirror):
     """
@@ -135,9 +152,11 @@ class Auraliser(object):
         """
         Configuration of this auraliser.
         """
-        self.settings.update(DEFAULT_SETTINGS)
+        recursive_mapping_update(self.settings, DEFAULT_SETTINGS)
+        #self.settings.recursupdate(DEFAULT_SETTINGS)
         if settings:
-            self.settings.update(settings)
+            recursive_mapping_update(self.settings, settings)
+            #self.settings.update(settings)
         
         self.atmosphere = atmosphere if atmosphere else Atmosphere()
         """

@@ -1,7 +1,7 @@
 """Reverter.
 """
 
-from .auralisation import DEFAULT_SETTINGS
+from .auralisation import DEFAULT_SETTINGS, recursive_mapping_update
 from .propagation import *
 
 
@@ -27,9 +27,11 @@ class Reverter(object):
         """
         Configuration of this auraliser.
         """
-        self.settings.update(DEFAULT_SETTINGS)
+        recursive_mapping_update(self.settings, DEFAULT_SETTINGS)
+        #self.settings.recursupdate(DEFAULT_SETTINGS)
         if settings:
-            self.settings.update(settings)
+            recursive_mapping_update(self.settings, settings)
+            #self.settings.update(settings)
         
     def revert(self, signal):#, signal, doppler=True, atmospheric_absorption=True, spherical_spreading=True):
         """
