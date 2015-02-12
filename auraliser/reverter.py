@@ -60,8 +60,8 @@ class Reverter(object):
             signal = unapply_doppler(signal, 
                                      delay, 
                                      fs,
-                                     method=settings['doppler']['interpolation'],
-                                     kernelsize=settings['doppler']['kernelsize']
+                                     method=self.settings['doppler']['interpolation'],
+                                     kernelsize=self.settings['doppler']['kernelsize']
                                      )
            
             if self.settings['doppler']['purge_zeros']:
