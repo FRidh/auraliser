@@ -709,8 +709,9 @@ def _lanczos_resample(signal, samples, output, a):
     """Sample signal at float samples.
     """
     for index, x in enumerate(samples):
-        for i in range(math.floor(x)-a+1, math.floor(x+a)):
-            output[index] += signal[i] * _lanczos_window(x-i, a)
+        if x >= 0 and x < len(signal):
+            for i in range(math.floor(x)-a+1, math.floor(x+a)):
+                output[index] += signal[i] * _lanczos_window(x-i, a)
     return output
 
 
@@ -726,7 +727,7 @@ def interpolation_lanczos(signal, times, fs, a=10):
     
     """
     samples = -times * fs + np.arange(len(signal))
-    samples[samples < 0.0] = 0.0 # This is the slowest part.
+    #samples[samples < 0.0] = 0.0 # This is the slowest part.
     return _lanczos_resample(signal, samples, np.zeros_like(signal), a)
     
 
