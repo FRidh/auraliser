@@ -44,8 +44,8 @@ class Reverter(object):
         
         
         if self.settings['spreading']['include']:
-        #if spherical_spreading:
             signal = unapply_spherical_spreading(signal, distance)
+        
         if self.settings['atmospheric_absorption']['include']:
             signal = unapply_atmospheric_absorption(signal,
                                                     fs,
@@ -54,9 +54,15 @@ class Reverter(object):
                                                     n_blocks=self.settings['atmospheric_absorption']['taps'],
                                                     n_distances=self.settings['atmospheric_absorption']['unique_distances']
                                                     )[0:samples]
+        
         if self.settings['doppler']['include'] and self.settings['doppler']['frequency']:
             delay = distance / self.atmosphere.soundspeed
-            signal = unapply_doppler(signal, delay, fs)
+            signal = unapply_doppler(signal, 
+                                     delay, 
+                                     fs,
+                                     method=settings['doppler']['interpolation'],
+                                     kernelsize=settings['doppler']['kernelsize']
+                                     )
            
             if self.settings['doppler']['purge_zeros']:
                 delay = int(distance[-1]/self.atmosphere.soundspeed * fs)

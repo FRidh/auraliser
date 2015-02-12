@@ -25,6 +25,9 @@ from scipy.special import gamma
 from scipy.special import kv as besselk
 from scipy.integrate import cumtrapz
 
+import math
+import numba
+
 
 #def ir_real_signal(spectrum, n_blocks=None):
     #"""Take a single-sided spectrum `tf` and convert it to an impulse response of `N` samples.
@@ -131,19 +134,50 @@ def _map_source_to_receiver(signal, delay, fs):
     #:type signal: :class:`auraliser.signal.Signal`
     #"""        
     #return _apply_doppler_shift(signal, delay, fs)
+
+
+def interpolation_linear(signal, times, fs):
+    """Linear interpolation of `signal` at `times`.
     
-def apply_doppler(signal, delay, fs):
-    """Apply Doppler shift to ``signal``.
+    :param signal: Signal.
+    :param times: Times to sample at.
+    :param fs: Sample frequency.
     
-    :param signal: Signal to be shifted.
-    :type signal: :class:`auraliser.signal.Signal`
-    """    
+    """
     k_r = np.arange(0, len(signal), 1)          # Create vector of indices
-    k = k_r - delay * fs                      # Create vector of warped indices 
+    k = k_r - times * fs                      # Create vector of warped indices 
     kf = np.floor(k).astype(int)       # Floor the warped indices. Convert to integers so we can use them as indices.
     R = ( (1.0-k+kf) * signal[kf] + (k-kf) * signal[kf+1] ) * (kf >= 0) #+ 0.0 * (kf<0)
     return R
     
+    
+def apply_doppler(signal, delay, fs, method='linear', kernelsize=10):
+    """Apply Doppler shift to ``signal``.
+    
+    :param signal: Signal to be shifted.
+    :param delay: Delays.
+    :param fs: Sample frequency.
+    :param kernelsize: Kernelsize in case of `lanczos` method
+    
+    """
+    if method == 'linear':
+        return interpolation_linear(signal, delay, fs)
+    elif method == 'lanczos':
+        return interpolation_lanczos(signal, delay, fs, kernelsize)
+    
+def unapply_doppler(signal, delay, fs, method='linear', kernelsize=10):
+    """Unapply Doppler shift to ``signal``.
+    
+    :param signal: Signal to be shifted.
+    :param delay: Delays.
+    :param fs: Sample frequency.
+    :param kernelsize: Kernelsize in case of `lanczos` method
+    
+    """
+    if method == 'linear':
+        return _map_source_to_receiver(signal, -delay, fs)
+    elif method == 'lanczos':
+        return interpolation_lanczos(signal, -delay, fs, kernelsize)
     
 def apply_delay_turbulence(signal, delay, fs):
     """Apply phase delay due to turbulence.
@@ -164,13 +198,16 @@ def apply_delay_turbulence(signal, delay, fs):
     R = ( (1.0 + dk) * signal[kf] + (-dk) * signal[kf+1] ) * (ko >= 0) * (ko+1 < len(k)) #+ 0.0 * (kf<0)
     return R
     
-def unapply_doppler(signal, delay, fs):
-    """Unapply Doppler shift to ``signal``.
+#def unapply_doppler(signal, delay, fs):
+    #"""Unapply Doppler shift to ``signal``.
     
-    :param signal: Signal to be shifted.
-    :type signal: :class:`auraliser.signal.Signal`
-    """
-    return _map_source_to_receiver(signal, -delay, fs)
+    #:param signal: Signal to be shifted.
+    #:type signal: :class:`auraliser.signal.Signal`
+    #"""
+    #return _map_source_to_receiver(signal, -delay, fs)
+
+
+
 
 
 def apply_doppler_amplitude_using_vectors(signal, mach, unit, multipole):
@@ -651,3 +688,62 @@ def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=12
     :param n_distances: Amount of unique distances to consider.
     """
     return _atmospheric_absorption(signal, fs, atmosphere, distance, +1, n_blocks, n_distances)
+
+
+@numba.jit(nogil=True)
+def sinc(x):
+    if x == 0:
+        return 1.0
+    else:
+        return math.sin(x*math.pi) / (x*math.pi)
+
+@numba.jit(nogil=True)
+def _lanczos_window(x, a):
+    if -a < x and x < a:
+        return sinc(x) * sinc(x/a)
+    else:
+        return 0.0
+
+@numba.jit(nogil=True)    
+def _lanczos_resample(signal, samples, output, a):
+    """Sample signal at float samples.
+    """
+    for index, x in enumerate(samples):
+        for i in range(math.floor(x)-a+1, math.floor(x+a)):
+            output[index] += signal[i] * _lanczos_window(x-i, a)
+    return output
+
+
+def interpolation_lanczos(signal, times, fs, a=10):
+    """Lanczos interpolation of `signal` at `times`.   
+        
+    :param signal: Signal.
+    :param times: Times to sample at.
+    :param fs: Sample frequency.
+    :param kernelsize: Size of Lanczos kernel :math:`a`.
+    
+    http://en.wikipedia.org/wiki/Lanczos_resampling
+    
+    """
+    samples = -times * fs + np.arange(len(signal))
+    samples[samples < 0.0] = 0.0 # This is the slowest part.
+    return _lanczos_resample(signal, samples, np.zeros_like(signal), a)
+    
+
+#@numba.jit(nogil=True)    
+#def _lanczos_resample(signal, delay, output, a, fs):
+    #"""Sample signal at float samples.
+    #"""
+    #for index in range(len(signal)):#, x in enumerate(samples):
+        #x = -delay[index] * fs + index
+        #if x < 0.0:
+            #x = 0.0
+        #for i in range(math.floor(x)-a+1, math.floor(x+a)):
+            #output[index] += signal[i] * _lanczos_window(x-i, a)
+    #return output
+    
+    
+    
+
+    
+    

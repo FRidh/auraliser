@@ -482,15 +482,19 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
         - Atmospheric attenuation.
     """
     logging.info("Auralising mirror")
-    
-    #print(signal)
+
     
     distance = norm(source - receiver)
 
     # Apply delay due to spreading (Doppler shift)
     if settings['doppler']['include'] and settings['doppler']['frequency']:
         logging.info("Applying Doppler frequency shift.")
-        signal = auraliser.propagation.apply_doppler(signal, distance/atmosphere.soundspeed, fs)
+        signal = auraliser.propagation.apply_doppler(signal, 
+                                                     distance/atmosphere.soundspeed, 
+                                                     fs, 
+                                                     method=settings['doppler']['interpolation'],
+                                                     kernelsize=settings['doppler']['kernelsize'],
+                                                     )
     
     # Apply atmospheric turbulence.
     if settings['turbulence']['include']:
@@ -1000,6 +1004,8 @@ DEFAULT_SETTINGS = {
         'frequency'         :   True,   # Include the frequency shift.
         'amplitude'         :   True,   # Include the change in intensity.
         'purge_zeros'       :   False,  # Purge the (initial) zeros due to the delay in arrival.
+        'interpolation'     :   'lanczos',   # Lanczos interpolation
+        'kernelsize'        :   10,
         },
     'spreading':{
         'include'           :   True,   # Include spherical spreading
