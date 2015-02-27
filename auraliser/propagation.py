@@ -709,7 +709,7 @@ def _lanczos_resample(signal, samples, output, a):
     """Sample signal at float samples.
     """
     for index, x in enumerate(samples):
-        if x >= 0 and x < len(signal):
+        if x >= 0.0 and x < len(signal):
             for i in range(math.floor(x)-a+1, math.floor(x+a)):
                 if i >= 0 and i < len(signal):
                     output[index] += signal[i] * _lanczos_window(x-i, a)
