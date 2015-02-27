@@ -1,5 +1,5 @@
 from setuptools import setup
-from Cython.Build import cythonize
+#from Cython.Build import cythonize
 import numpy as np
 
 setup(
@@ -17,5 +17,5 @@ setup(
       install_requires=[
           'numpy',
           'matplotlib'],
-      ext_modules = cythonize('auraliser/*.pyx')
+      #ext_modules = cythonize('auraliser/*.pyx')
       )
