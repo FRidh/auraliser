@@ -5,7 +5,7 @@ The auralisation module provides generic tools for auralisation and calculating 
 #import numpy as np
 #np.seterr(all='raise')
 
-from .auralisation import Auraliser, Geometry, DEFAULT_SETTINGS
+from .auralisation import Auraliser, Geometry, get_default_settings
 #from signal import Signal
 from acoustics.atmosphere import Atmosphere
 

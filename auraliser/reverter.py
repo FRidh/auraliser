@@ -27,7 +27,7 @@ class Reverter(object):
         """
         Configuration of this auraliser.
         """
-        recursive_mapping_update(self.settings, DEFAULT_SETTINGS)
+        recursive_mapping_update(self.settings, _DEFAULT_SETTINGS)
         #self.settings.recursupdate(DEFAULT_SETTINGS)
         if settings:
             recursive_mapping_update(self.settings, settings)

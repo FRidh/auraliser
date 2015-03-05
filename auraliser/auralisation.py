@@ -152,7 +152,7 @@ class Auraliser(object):
         """
         Configuration of this auraliser.
         """
-        recursive_mapping_update(self.settings, DEFAULT_SETTINGS)
+        recursive_mapping_update(self.settings, _DEFAULT_SETTINGS)
         #self.settings.recursupdate(DEFAULT_SETTINGS)
         if settings:
             recursive_mapping_update(self.settings, settings)
@@ -985,11 +985,13 @@ class Geometry(object):
         
 
 
+def get_default_settings():
+    d = dict()
+    d = recursive_mapping_update(d, DEFAULT_SETTINGS)
+    return d 
     
 
-
-
-DEFAULT_SETTINGS = {
+_DEFAULT_SETTINGS = {
     
     'reflections':{
         'include'           :   True,   # Include reflections
