@@ -1,7 +1,7 @@
 """Reverter.
 """
 
-from .auralisation import DEFAULT_SETTINGS, recursive_mapping_update
+from .auralisation import _DEFAULT_SETTINGS, recursive_mapping_update
 from .propagation import *
 
 
