@@ -987,7 +987,7 @@ class Geometry(object):
 
 def get_default_settings():
     d = dict()
-    d = recursive_mapping_update(d, DEFAULT_SETTINGS)
+    d = recursive_mapping_update(d, _DEFAULT_SETTINGS)
     return d 
     
 
