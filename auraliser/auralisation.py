@@ -44,8 +44,6 @@ from .generator import Noise
 from .tools import db_to_lin, lin_to_db
 from .tools import norm, unit_vector
 
-from into import into
-
 import collections
 
 def recursive_mapping_update(d, u):
