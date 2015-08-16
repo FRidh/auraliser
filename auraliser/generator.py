@@ -31,7 +31,7 @@ class Generator(object, metaclass=abc.ABCMeta):
         pass
     
     def output(self, t, fs):
-        return acoustics.signal.normalise(self._output(t, fs))
+        return acoustics.signal.normalize(self._output(t, fs))
     
 class Custom(Generator):
     """
@@ -66,7 +66,7 @@ class Sine(Generator):
     def _output(self, t, fs):
         """
         """
-        return np.sin(2.0 * np.pi * self.frequency * np.arange(0.0, t, 1.0/fs))
+        return np.sin(2.0 * np.pi * self.frequency * np.arange(0.0, t, 1.0/fs)) * np.sqrt(2) # sqrt(2) for leq=94 dB
 
 class AbstractNoise(Generator, metaclass=abc.ABCMeta):
     """Abstract class for noise generators.
@@ -85,14 +85,14 @@ class AbstractNoise(Generator, metaclass=abc.ABCMeta):
     
     @color.setter
     def color(self, value):
-        if value not in acoustics.generator.noise_generators.keys():
+        if value not in acoustics.generator._noise_generators.keys():
             raise ValueError("Noise color is unavailable.")
         else:
             self._color = value
     
     @property
     def _noise(self):
-        return acoustics.generator.noise_generators[self._color]
+        return acoustics.generator._noise_generators[self._color]
     
 
 

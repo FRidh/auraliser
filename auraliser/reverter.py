@@ -63,10 +63,17 @@ class Reverter(object):
                                      method=self.settings['doppler']['interpolation'],
                                      kernelsize=self.settings['doppler']['kernelsize']
                                      )
-           
+            # 
             if self.settings['doppler']['purge_zeros']:
                 delay = int(distance[-1]/self.atmosphere.soundspeed * fs)
                 signal = signal[0:len(signal)-delay]
         
         
         return Signal(signal, fs)
+
+
+    def initial_delay(signal):
+        """Initial delay
+        """
+        pass
+    

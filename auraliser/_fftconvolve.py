@@ -12,6 +12,8 @@ try:
 except ImportError:
     from numpy.fft import rfft, irfft
 
+from numpy.fft import rfft, irfft
+
 from numpy import (allclose, angle, arange, argsort, array, asarray,
                    atleast_1d, atleast_2d, cast, dot, exp, expand_dims,
                    iscomplexobj, isscalar, mean, ndarray, newaxis, ones, pi,

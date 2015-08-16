@@ -263,7 +263,7 @@ def unapply_doppler_amplitude(signal, mach, angle, multipole):
     
 
 
-from turbulence.vonkarman import covariance_wind as covariance_von_karman
+#from turbulence.vonkarman import covariance_wind as covariance_von_karman
 
 #def covariance_von_karman(f, c0, spatial_separation, distance, scale, Cv, steps=20, initial=0.001):
     #"""Covariance. Wind fluctuations only.
@@ -571,6 +571,8 @@ def apply_turbulence_gaussian(signal, fs, mean_mu_squared, distance, scale,
     # The autospectrum is real-valued. Taking the inverse DFT results in complex and symmetric values."""
     ir = np.fft.ifftshift((ifft(np.sqrt(auto)).real), axes=-1) #
     ir = 2.0 * ir[:, 0:samples] # Only take half the IR to have right amount of samples.
+    
+    ir *= np.hamming(samples) # Seems to reduce high-frequent noise. Caused by small discontinueties?
     
     del auto
     

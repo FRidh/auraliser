@@ -896,7 +896,8 @@ class Virtualsource(Base):
 
         if signal is None:
             self.signal = Noise()
-        
+        else:
+            self.signal = signal
         
         self.directivity = directivity if directivity else Omni()
         """Directivity of the signal.
@@ -1026,7 +1027,7 @@ _DEFAULT_SETTINGS = {
         'spatial_separation':   False,
         'fraction'          :   1,      # Fraction of filter
         'order'             :   1,      # Order of 
-        'random_seed'       :   None,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
+        'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
         'model'             :   'gaussian',
         },
     'plot':{
