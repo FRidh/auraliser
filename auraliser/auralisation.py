@@ -1026,7 +1026,7 @@ _DEFAULT_SETTINGS = {
         'phase'             :   True,   # Phase modulations
         'spatial_separation':   False,
         'fraction'          :   1,      # Fraction of filter
-        'order'             :   1,      # Order of 
+        'order'             :   8,      # Order of filter
         'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
         'model'             :   'gaussian',
         },

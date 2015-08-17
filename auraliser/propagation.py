@@ -502,7 +502,7 @@ def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, scale, spatial_se
 
 def apply_turbulence_gaussian(signal, fs, mean_mu_squared, distance, scale, 
                               spatial_separation, soundspeed=343.0, 
-                              fraction=3, order=1, include_saturation=True, 
+                              fraction=1, order=8, include_saturation=True, 
                               include_amplitude=True, include_phase=True, 
                               seed=None):
     """Apply turbulence to signal.
