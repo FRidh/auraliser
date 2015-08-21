@@ -59,9 +59,9 @@ def ir_atmosphere(spectrum, n_blocks=None):
 def apply_spherical_spreading(signal, distance):
     """Apply spherical spreading to ``signal``.
     
-    .. math:: p_2 = p_1 \\frac{r_2}{r_1}
+    .. math:: p_2 = p_1 \\frac{r_1}{r_2}
     
-    where :math:`r_2` is 1.0.
+    where :math:`r_1` is 1.0.
     
     :param signal: Signal
     :type signal: :class:`auraliser.signal.Signal`
@@ -73,7 +73,7 @@ def apply_spherical_spreading(signal, distance):
 def unapply_spherical_spreading(signal, distance):
     """Unapply spherical spreading.
     
-    .. math:: p_2 = p_1 \\frac{r_2}{r_1}
+    .. math:: p_2 = p_2 \\frac{r_1}{r_2}
     
     where :math:`r_1` is 1.0.
     
