@@ -331,7 +331,7 @@ class Auraliser(object):
         # Determine mirrors
         logging.info("_auralise_subsource: Determine mirrors.")
         if self.settings['reflections']['include'] and len(self.geometry.walls) > 0: # Are reflections possible?
-            logging.info(_"_auralise_subsource: Searching for mirrors. Reflections are enabled, and we have walls.")
+            logging.info("_auralise_subsource: Searching for mirrors. Reflections are enabled, and we have walls.")
             resolution = self.settings['reflections']['update_resolution']
             subsource_position = [Point(*src) for src in subsource.position[::resolution]]# subsource.position[::n]
             receiver_position = [Point(*receiver.position[0])]
@@ -346,7 +346,7 @@ class Auraliser(object):
             mirrors = (_Mirror(subsource.position, np.array(mirror.position), emission, self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror, emission in zip(mirrors2, emissions))
             del emissions
         else: # No walls, so no reflections. Therefore the only source is the real source.
-            logging.info(_"_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
+            logging.info("_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
             emission = subsource.signal( unit_vector(receiver.position - subsource.position))
             mirrors = [ _Mirror(np.array(subsource.position), receiver.position, emission, self.settings, self.samples, self.sample_frequency, self.atmosphere) ]
             del emission
