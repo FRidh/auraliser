@@ -315,7 +315,7 @@ class Auraliser(object):
         
         .. note:: Mirror receivers are calculated instead of mirror sources.
         """
-        logging.info("Determining mirrors sources.")
+        logging.info("_get_mirror_sources_from_ism: Determining mirrors sources.")
         model = ism.Model(self.geometry.walls, receiver, source, max_order=self.settings['reflections']['order_threshold'])
         mirrors = model.determine(strongest=self.settings['reflections']['mirrors_threshold'])
         yield from mirrors
@@ -326,10 +326,13 @@ class Auraliser(object):
         """
         
         # Generate the emission signals.
+        logging.info("_auralise_subsource: Generating subsource emission signals.")
         subsource.generate_signals()
         
         # Determine mirrors
+        logging.info("_auralise_subsource: Determine mirrors.")
         if self.settings['reflections']['include'] and len(self.geometry.walls) > 0: # Are reflections possible?
+            logging.info(_"_auralise_subsource: Searching for mirrors. Reflections are enabled, and we have walls.")
             resolution = self.settings['reflections']['update_resolution']
             subsource_position = [Point(*src) for src in subsource.position[::resolution]]# subsource.position[::n]
             receiver_position = [Point(*receiver.position[0])]
@@ -344,11 +347,11 @@ class Auraliser(object):
             mirrors = (_Mirror(subsource.position, np.array(mirror.position), emission, self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror, emission in zip(mirrors2, emissions))
             del emissions
         else: # No walls, so no reflections. Therefore the only source is the real source.
+            logging.info(_"_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
             emission = subsource.signal( unit_vector(receiver.position - subsource.position))
             mirrors = [ _Mirror(np.array(subsource.position), receiver.position, emission, self.settings, self.samples, self.sample_frequency, self.atmosphere) ]
             del emission
 
-        
         mirrors1, mirrors2 = itertools.tee(mirrors)
         # Apply propagation effects.
         signals = itertools.starmap(_apply_propagation_effects, mirrors1)
@@ -363,13 +366,13 @@ class Auraliser(object):
     def _auralise_source(self, source, receiver):
         """Synthesize the signal at `receiver` due to `source`. This includes all subsources and respective mirror sources.
         """
-        logging.info("Auralising source {}".format(source.name))
+        logging.info("_auralise_source: Auralising source {}".format(source.name))
 
         for subsource in source.subsources:
             signals_and_orientations = self._auralise_subsource(subsource, receiver)
             yield from signals_and_orientations
             
-        logging.info("Finished auralising source {}".format(source.name))
+        logging.info("_auralise_source: Finished auralising source {}".format(source.name))
 
     def auralise(self, receiver, sources=None):
         """Synthesise the signal due to one or multiple sources at `receiver`. All subsources are included.
@@ -379,9 +382,9 @@ class Auraliser(object):
         
         """
         receiver = self.get_object(receiver)
-        logging.info("Auralising at {}".format(receiver.name))
+        logging.info("auralise: Auralising at {}".format(receiver.name))
         if self.can_auralise():
-            logging.info("Can auralise.")
+            logging.info("auralise: Can auralise.")
         
         sources = sources if sources else self.sources
         sources = (self.get_object(source) for source in sources)
@@ -407,7 +410,7 @@ def _apply_source_effects(mirror, subsource, settings, samples, fs, atmosphere):
         - Effectiveness and strength of mirror
     
     """
-    logging.info("Applying source effects...")
+    logging.info("_apply_source_effects: Applying source effects...")
 
     resolution = settings['reflections']['update_resolution'] 
     
@@ -422,16 +425,18 @@ def _apply_source_effects(mirror, subsource, settings, samples, fs, atmosphere):
 
     # Apply correct source strength due to reflections.
     if not settings['reflections']['force_hard'] and not np.all(mirror.strength == 1.0): # Save computations, for direct source there is no need.
-
-            signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_reflection(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
-            
-            # We cannot yet delete the strength of the object since a child mirror source might need it.
-            # Same for the position, as the child needs to know it for the directivity.
-            # But, we can at least delete the strength of this mother source. (also not true?!)
-            #del mirror.strength 
-            #del mirror.mother.strength, mirror.mother.effective, mirror.mother.distance
-            print(signal)
-    
+        
+        logging.info("_apply_source_effects: Soft ground.")
+        signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_reflection(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
+        
+        # We cannot yet delete the strength of the object since a child mirror source might need it.
+        # Same for the position, as the child needs to know it for the directivity.
+        # But, we can at least delete the strength of this mother source. (also not true?!)
+        #del mirror.strength 
+        #del mirror.mother.strength, mirror.mother.effective, mirror.mother.distance
+        #print(signal)
+    else:
+        logging.info("_apply_source_effects: Hard ground.")
     del mirror
     return signal
 
@@ -484,14 +489,14 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
         - Atmospheric turbulence.
         - Atmospheric attenuation.
     """
-    logging.info("Auralising mirror")
+    logging.info("_apply_propagation_effects: Auralising mirror")
 
     
     distance = norm(source - receiver)
 
     # Apply delay due to spreading (Doppler shift)
     if settings['doppler']['include'] and settings['doppler']['frequency']:
-        logging.info("Applying Doppler frequency shift.")
+        logging.info("_apply_propagation_effects: Applying Doppler frequency shift.")
         signal = auraliser.propagation.apply_doppler(signal, 
                                                      distance/atmosphere.soundspeed, 
                                                      fs, 
@@ -501,7 +506,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     
     # Apply atmospheric turbulence.
     if settings['turbulence']['include']:
-        logging.info("Applying turbulence.")
+        logging.info("_apply_propagation_effects: Applying turbulence.")
         
         if settings['turbulence']['spatial_separation']:
             rho, dr = auraliser.propagation._spatial_separation(source, (np.random.randn(3))[None,:], receiver)
@@ -566,7 +571,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
         
     # Apply atmospheric absorption.
     if settings['atmospheric_absorption']['include']:
-        logging.info("Applying atmospheric absorption.")
+        logging.info("_apply_propagation_effects: Applying atmospheric absorption.")
         signal = auraliser.propagation.apply_atmospheric_absorption(signal,
                                               fs,
                                               atmosphere,
@@ -577,7 +582,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
 
     # Apply spherical spreading.
     if settings['spreading']['include']:
-        logging.info("Applying spherical spreading.")
+        logging.info("_apply_propagation_effects: Applying spherical spreading.")
         signal = auraliser.propagation.apply_spherical_spreading(signal, distance)
 
     # Force zeros until first real sample arrives. Should only be done when the time delay (Doppler) is applied.
