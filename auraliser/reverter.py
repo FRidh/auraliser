@@ -3,7 +3,7 @@
 
 from .auralisation import _DEFAULT_SETTINGS, recursive_mapping_update
 from .propagation import *
-
+import logging
 
 from acoustics._signal import Signal
 from acoustics.atmosphere import Atmosphere
@@ -44,9 +44,11 @@ class Reverter(object):
         
         
         if self.settings['spreading']['include']:
+            logging.info("revert: Unapply spherical spreading.")
             signal = unapply_spherical_spreading(signal, distance)
         
         if self.settings['atmospheric_absorption']['include']:
+            logging.info("revert: Unapply atmospheric absorption.")
             signal = unapply_atmospheric_absorption(signal,
                                                     fs,
                                                     self.atmosphere,
@@ -56,6 +58,7 @@ class Reverter(object):
                                                     )[0:samples]
         
         if self.settings['doppler']['include'] and self.settings['doppler']['frequency']:
+            logging.info("revert: Unapply Doppler frequency shift.")
             delay = distance / self.atmosphere.soundspeed
             signal = unapply_doppler(signal, 
                                      delay, 
@@ -65,6 +68,7 @@ class Reverter(object):
                                      )
             # 
             if self.settings['doppler']['purge_zeros']:
+                logging.info("revert: Purge zeros due to initial delay.")
                 delay = int(distance[-1]/self.atmosphere.soundspeed * fs)
                 signal = signal[0:len(signal)-delay]
         
