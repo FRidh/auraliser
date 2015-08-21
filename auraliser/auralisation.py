@@ -336,15 +336,19 @@ class Auraliser(object):
             subsource_position = [Point(*src) for src in subsource.position[::resolution]]# subsource.position[::n]
             receiver_position = [Point(*receiver.position[0])]
             
-            # Mirror receivers
-            mirrors1, mirrors2 = itertools.tee( self._get_mirror_sources_from_ism(subsource_position, receiver_position) )
-            del subsource_position, receiver_position
+            ## Mirror receivers
+            #mirrors1, mirrors2 = itertools.tee( self._get_mirror_sources_from_ism(subsource_position, receiver_position) )
+            #del subsource_position, receiver_position
 
-            emissions = (_apply_source_effects(mirror, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere) for mirror in mirrors1)
+            #emissions = (_apply_source_effects(mirror, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere) for mirror in mirrors1)
             
-            # pre-zip mirrors for propagation effects calculation
-            mirrors = (_Mirror(subsource.position, np.array(mirror.position), emission, self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror, emission in zip(mirrors2, emissions))
-            del emissions
+            ## pre-zip mirrors for propagation effects calculation
+            #mirrors = (_Mirror(subsource.position, np.array(mirror.position), emission, self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror, emission in zip(mirrors2, emissions))
+            #del emissions
+            
+            mirrors = self._get_mirror_sources_from_ism(subsource_position, receiver_position)
+            mirrors = (_Mirror(subsource.position, np.array(mirror.position), _apply_source_effects(mirror, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere), self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror in mirrors)
+
         else: # No walls, so no reflections. Therefore the only source is the real source.
             logging.info("_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
             emission = subsource.signal( unit_vector(receiver.position - subsource.position))
