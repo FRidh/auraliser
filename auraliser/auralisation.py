@@ -41,7 +41,6 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import auraliser
 import auraliser.propagation
 from .generator import Noise
-from .tools import db_to_lin, lin_to_db
 from .tools import norm, unit_vector
 
 import collections
@@ -924,6 +923,8 @@ class Virtualsource(Base):
         """Generated signal
         
         This value is generated and stored at the beginning of an auralization.
+        
+        Includes gain, but not yet directivity!
         """
         
         self.multipole = multipole
@@ -955,14 +956,14 @@ class Virtualsource(Base):
     def generate_signal(self):
         t = self.subsource.source._auraliser.duration
         fs = self.subsource.source._auraliser.sample_frequency
-        self._signal_generated = self.signal.output(t, fs)
+        self._signal_generated = Signal(self.signal.output(t, fs), fs).gain(self.gain)
 
     def emission(self, orientation):
         """The signal this :class:`Virtualsource` emits as function of orientation.
         
         :param orientation: A vector of cartesian coordinates.
         """
-        signal = self._signal_generated * self.directivity.using_cartesian(orientation[:,0], orientation[:,1], orientation[:,2]) * db_to_lin(self.gain)
+        signal = self._signal_generated * self.directivity.using_cartesian(orientation[:,0], orientation[:,1], orientation[:,2])
         if self._auraliser.settings['doppler']['include'] and self._auraliser.settings['doppler']['amplitude']: # Apply change in amplitude.
             mach = np.gradient(self.subsource.position)[0] * self._auraliser.sample_frequency / self._auraliser.atmosphere.soundspeed 
             signal = auraliser.propagation.apply_doppler_amplitude_using_vectors(signal, mach, orientation, self.multipole)
