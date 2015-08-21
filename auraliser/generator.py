@@ -48,7 +48,7 @@ class Custom(Generator):
     def _output(self, t, fs):
         """
         """
-        assert(t == len(self.values))
+        assert(int(t*fs) == len(self.values))
         return self.values
     
 
