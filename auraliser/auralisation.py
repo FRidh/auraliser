@@ -240,7 +240,7 @@ class Auraliser(object):
         """
         Add receiver to auraliser.
         """
-        return self._add_object(name, Receiver, position)#*args, **kwargs)
+        return self._add_object(name, Receiver, position=position)#*args, **kwargs)
     
     
     @property
@@ -895,18 +895,14 @@ class Virtualsource(Base):
     Class for modelling specific spectral components within a :class:`Auraliser.SubSource` that have the same directivity.
     """
 
-    def __init__(self, auraliser, name, subsource, signal=None, rotation=None, directivity=None, gain=0.0, multipole=0):
+    def __init__(self, auraliser, name, subsource, signal, rotation=None, directivity=None, gain=0.0, multipole=0):
         """Constructor.
         """
         
         super().__init__(auraliser, name)
         
         self.subsource = subsource
-
-        if signal is None:
-            self.signal = Noise()
-        else:
-            self.signal = signal
+        self.signal = signal
         
         self.directivity = directivity if directivity else Omni()
         """Directivity of the signal.

@@ -24,6 +24,7 @@ from .tools import norm
 from scipy.special import gamma
 from scipy.special import kv as besselk
 from scipy.integrate import cumtrapz
+from scipy.signal import fftconvolve, filtfilt
 
 import math
 import numba
@@ -109,6 +110,8 @@ def _map_source_to_receiver(signal, delay, fs):
     :type signal: :class:`auraliser.signal.Signal`
     :param delay: Delay time
     :type delay: :class:`np.ndarray`
+    
+    This method is used for back propagation.
     """
             
     k_r = np.arange(0, len(signal), 1)          # Create vector of indices
@@ -142,6 +145,8 @@ def interpolation_linear(signal, times, fs):
     :param signal: Signal.
     :param times: Times to sample at.
     :param fs: Sample frequency.
+    
+    This method is used in forward propagation.
     
     """
     k_r = np.arange(0, len(signal), 1)          # Create vector of indices
@@ -333,14 +338,12 @@ def _spatial_separation(A, B, C):
     return spatial_separation, dr
 
 
-from scipy.signal import fftconvolve, butter, filtfilt
-
-def moving_average(a, n=3) :
-    ret = np.cumsum(a, dtype=float)
-    ret[n:] = ret[n:] - ret[:-n]
-    return ret[n - 1:] / n
 
 
+#def moving_average(a, n=3) :
+    #ret = np.cumsum(a, dtype=float)
+    #ret[n:] = ret[n:] - ret[:-n]
+    #return ret[n - 1:] / n
 
 def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, scale, spatial_separation, Cv, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
     
