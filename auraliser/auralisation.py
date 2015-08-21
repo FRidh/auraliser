@@ -219,6 +219,11 @@ class Auraliser(object):
             if name == obj.name:
                 self._objects.remove(obj)
     
+    def remove_objects(self):
+        """Delete all objects from model."""
+        for obj in self._objects:
+            self._objects.remove(obj)
+    
     def _add_object(self, name, model, *args, **kwargs):
         """Add object to model."""
         obj = model(weakref.proxy(self), name, *args, **kwargs)   # Add hidden hard reference
