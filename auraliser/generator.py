@@ -31,7 +31,7 @@ class Generator(object, metaclass=abc.ABCMeta):
         pass
     
     def output(self, t, fs):
-        return acoustics.signal.normalize(self._output(t, fs))
+        return self._output(t, fs)
     
 class Custom(Generator):
     """
