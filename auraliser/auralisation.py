@@ -253,7 +253,7 @@ class Auraliser(object):
     def samples(self):
         """Amount of samples.
         """
-        return self.duration * self.sample_frequency
+        return int(np.round(self.duration * self.sample_frequency))
     
     @property
     def objects(self):
@@ -392,7 +392,6 @@ class Auraliser(object):
         sources = sources if sources else self.sources
         sources = (self.get_object(source) for source in sources)
         
-        signal = 0.0
         for source in sources:
             yield from self._auralise_source(source, receiver)
 
