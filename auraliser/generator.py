@@ -48,7 +48,7 @@ class Custom(Generator):
     def _output(self, t, fs):
         """
         """
-        assert(int(t*fs) == len(self.values))
+        assert(int(int(np.round(t*fs))) == len(self.values))
         return self.values
     
 
@@ -108,7 +108,7 @@ class Noise(AbstractNoise):
     def _output(self, t, fs):
         """
         """
-        return self._noise(t*fs)
+        return self._noise(int(np.round(t*fs)))
         
 
 #class NoiseBand(AbstractNoise):
@@ -137,9 +137,9 @@ class Noise(AbstractNoise):
     #def output(self, t, fs):
         #"""
         #"""
-        #return acoustics.signal.bandpass(self._noise(t*fs), self.f1, self.f2, fs, order=self.order)
+        #return acoustics.signal.bandpass(self._noise(int(np.round(t*fs))), self.f1, self.f2, fs, order=self.order)
         ##h = firwin(self.numtaps, cutoff=[self.f1, self.f2], pass_zero=False, nyq=fs/2.0)
-        ##return convolve(self._noise(t*fs), h, mode='same') 
+        ##return convolve(self._noise(int(np.round(t*fs))), h, mode='same') 
     
     
 class NoiseBands(AbstractNoise):
@@ -172,7 +172,7 @@ class NoiseBands(AbstractNoise):
     def _output(self, t, fs):
         
         fb = acoustics.signal.Filterbank(self.bands, sample_frequency=fs, order=self.order)
-        noise = self._noise(t*fs)
+        noise = self._noise(int(np.round(t*fs)))
         output = np.zeros_like(noise)
         try:
             for band, gain in zip(fb.lfilter(noise), self.gains):
@@ -216,7 +216,7 @@ class NoiseBands(AbstractNoise):
         #"""
         #f = acoustics.signal.OctaveBand(center=self.centerfrequency, fraction=self.fraction)
         #fb = acoustics.signal.Filterbank(f, sample_frequency=fs, order=self.order)
-        #r = self._noise(t*fs)
+        #r = self._noise(int(np.round(t*fs)))
         #return list(fb.filtfilt(r))[0]
         
 
@@ -288,10 +288,10 @@ class NoiseBands(AbstractNoise):
         #"""
         #"""        
         #if self.stair:
-            #noise = self._noise(t*fs)
+            #noise = self._noise(int(np.round(t*fs)))
             #ob = acoustics.signal.OctaveBand(center=self.centerfrequencies, fraction=self.fraction)
             #fb = acoustics.signal.Filterbank(ob, sample_frequency=fs, order=self.order)
-            #out = np.zeros(t*fs)
+            #out = np.zeros(int(np.round(t*fs)))
             
             ##print(ob.center)
             #gains = db_to_lin(self.gains)
@@ -322,12 +322,12 @@ class NoiseBands(AbstractNoise):
             ###print(gains)
             
             #fil = firwin2(2047, f, gains, nyq=nyq)
-            #r = self._noise(t*fs)
+            #r = self._noise(int(np.round(t*fs)))
             #return convolve(r, fil, mode='same')
         
         ##f = acoustics.signal.OctaveBand(center=self.centerfrequencies, fraction=self.fraction)
         ##fb = acoustics.signal.Filterbank(f, sample_frequency=fs, order=self.order)
-        ##r = acoustics.generator.noise(t*fs, self.color)
+        ##r = acoustics.generator.noise(int(np.round(t*fs)), self.color)
         ##out = np.array(list(fb.filtfilt(r)))
         ##return (db_to_lin(self.gains[:,None]) * out).sum(axis=0)
         
