@@ -550,7 +550,7 @@ def apply_turbulence_gaussian(signal, fs, mean_mu_squared, distance, scale,
     #modulation_frequencies = bands.center
     
     ## Amount of signals.
-    #n_signals = len(modulation_frequencies)
+    n_signals = len(modulation_frequencies)
 
     ## Bandpass filtered input signal.
     #signals = np.empty((n_signals, samples), dtype='float64')
