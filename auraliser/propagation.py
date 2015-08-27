@@ -526,32 +526,37 @@ def apply_turbulence_gaussian(signal, fs, mean_mu_squared, distance, scale,
     :returns: The original signal but with fluctuations applied to it.
     
     """
-    samples = len(signal)
+    signal = Signal(signal, fs)
+    samples = signal.samples
     
-    # All fraction octaves band in range
-    bands = OctaveBand(fstart=5.0, fstop=fs/2., fraction=fraction) 
+    frequencies, signals = signal.fractional_octaves(fraction=fraction, order=order, purge=True, zero_phase=True)
+    del signal
+    modulation_frequencies = frequencies.center
     
-    nyq = fs/2.0 # Nyquist frequency
+    ## All fraction octaves band in range
+    #bands = OctaveBand(fstart=5.0, fstop=fs/2., fraction=fraction) 
     
-    # Assure cornerfrequencies of the fractional-octaves are below the Nyquist frequency
-    if (bands.upper >= nyq).any():
-        index = np.where( bands.upper < nyq)[0].max()
-        bands = OctaveBand(fstart=5.0, fstop=bands.center[index], fraction=fraction) 
+    #nyq = fs/2.0 # Nyquist frequency
     
-    filterbank = Filterbank(bands, sample_frequency=fs, order=order)
+    ## Assure cornerfrequencies of the fractional-octaves are below the Nyquist frequency
+    #if (bands.upper >= nyq).any():
+        #index = np.where( bands.upper < nyq)[0].max()
+        #bands = OctaveBand(fstart=5.0, fstop=bands.center[index], fraction=fraction) 
     
-    # Modulation frequencies.
-    modulation_frequencies = bands.center
+    #filterbank = Filterbank(bands, sample_frequency=fs, order=order)
     
-    # Amount of signals.
-    n_signals = len(modulation_frequencies)
+    ## Modulation frequencies.
+    #modulation_frequencies = bands.center
+    
+    ## Amount of signals.
+    #n_signals = len(modulation_frequencies)
 
-    # Bandpass filtered input signal.
-    signals = np.empty((n_signals, samples), dtype='float64')
-    for i, signal_i in enumerate(filterbank.filtfilt(signal)):
-        signals[i,:] = signal_i
+    ## Bandpass filtered input signal.
+    #signals = np.empty((n_signals, samples), dtype='float64')
+    #for i, signal_i in enumerate(filterbank.filtfilt(signal)):
+        #signals[i,:] = signal_i
     
-    del signal, bands, filterbank
+    #del signal, bands, filterbank
     
     # Wavenumber
     k = 2.0 * np.pi * modulation_frequencies / soundspeed
