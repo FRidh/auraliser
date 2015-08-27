@@ -28,6 +28,7 @@ from scipy.signal import fftconvolve, filtfilt
 
 import math
 import numba
+from acoustics import Signal
 
 
 #def ir_real_signal(spectrum, n_blocks=None):
