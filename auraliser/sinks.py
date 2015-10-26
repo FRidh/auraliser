@@ -1,7 +1,13 @@
 """Sinks.
+
+This module specifies encoding methods.
+
+Each encoding function takes at least the argument contributions.
+Contributions is an iterable of tuples. Each tuple consist of (signal, orientation).
 """
 import abc
 import itertools
+from acoustics import Signal
 from acoustics.ambisonics import acn
 from acoustics.directivity import SphericalHarmonic
 
@@ -20,7 +26,7 @@ def encode(contributions, directivities, resolution=1000):
         yield sum( ( (signal * np.repeat(channel.directivity.using_cartesian(*orientation[::resolution].T), resolution)[0:len(signal)]) for signal, orientation in contributions) ) 
 
 def mono(contributions):
-    """Output to mono.
+    """Encode contributions as mono signal.
     
     :param contributions: Contributions
     :returns: Signal
@@ -30,10 +36,12 @@ def mono(contributions):
     
     
 def ambisonics(contributions, order, resolution=1000):
-    """Encode as ambisonics using ACN format.
+    """Encode signal as ambisonics using ACN format.
     """
     directivities = (SphericalHarmonic(m=m, n=n) for n, m in acn)
-    yield from encode(contributions, directivities, order)
+    #yield from encode(contributions, directivities, order)
+    results = list(encode(contributions, directivities, order))
+    return Signal(results, results[0].fs)
  
  
 

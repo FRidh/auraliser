@@ -6,13 +6,14 @@ import numpy as np
 from scipy.signal import firwin, firwin2
 from scipy.signal import fftconvolve as convolve
 import abc
+from acoustics import Signal
 import acoustics.signal
 import acoustics.generator
 import matplotlib.pyplot as plt
 #import logging
 import warnings
 
-from .tools import db_to_lin
+
 
 
 class Generator(object, metaclass=abc.ABCMeta):
@@ -94,7 +95,7 @@ class AbstractNoise(Generator, metaclass=abc.ABCMeta):
     
     @property
     def _noise_generator(self):
-        return acoustics.generator._noise_generators[self._color]
+        return acoustics.generator._noise_generators[self.color]
     
 
 class Noise(AbstractNoise):
@@ -145,7 +146,7 @@ class NoiseBands(AbstractNoise):
     def _output(self, t, fs):
         samples = int(np.round(t*fs))
         noise = Signal(self._noise_generator(samples), fs)
-        signal = noise.bandpass_frequencies(self.bands, order=self.order, zero_phase=True).gain(self.gains).sum(axis=0)
+        signal = noise.bandpass_frequencies(self.bands, order=self.order, zero_phase=True)[1].gain(self.gains).sum(axis=0)
         return signal
         
         #fb = acoustics.signal.Filterbank(self.bands, sample_frequency=fs, order=self.order)
