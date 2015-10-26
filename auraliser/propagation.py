@@ -621,6 +621,7 @@ def _spatial_separation(A, B, C):
 from auraliser.scintillations import generate_fluctuations, apply_fluctuations
 
 def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed, scale, include_logamp, include_phase, seed=None, window=None, **kwargs):
+    signal = Signal(signal, fs)
     frequencies, signals = signal.fractional_octaves(fraction=fraction, order=order, purge=True, zero_phase=True)
     samples = len(signal)
     del signal
