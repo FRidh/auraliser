@@ -148,13 +148,14 @@ def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
         
     # Determine the covariance
     spatial_separation = np.ones(samples) * spatial_separation
-    covariance = covariance_func(spatial_separation=spatial_separation,
+    cov = covariance_func(spatial_separation=spatial_separation,
                                  distance=distance,
                                  wavenumber=wavenumber,
                                  scale=scale, **kwargs)
 
+    cov -= cov[0]
     # Create an impulse response using this covariance
-    ir = impulse_response_fluctuations(covariance, window=window)
+    ir = impulse_response_fluctuations(cov, window=window)
 
     # We need random numbers. Seed the generator and maintain the state.
     state = np.random.RandomState(seed)
