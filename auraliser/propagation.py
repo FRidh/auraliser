@@ -32,19 +32,6 @@ from acoustics import Signal
 import logging
 
 
-#def ir_real_signal(spectrum, n_blocks=None):
-    #"""Take a single-sided spectrum `tf` and convert it to an impulse response of `N` samples.
-
-    #:param spectrum: Single-sided spectrum real.
-    #:param n_blocks: Amount of blocks to use for the FFT and thus IR taps.
-
-    #.. note:: This function should work for multiple tf's in one array. In the input every row is a spectrum. In the output every row is an IR.
-
-    #"""
-    #spectrum = np.hstack((spectrum, spectrum[..., 1::-1]))
-    #return np.fft.ifftshift(np.fft.ifft(spectrum, n=n_blocks), axes=0).real
-
-
 def ir_reflection(spectrum, n_blocks=None):
     """Complex single-sided spectrum to real impulse response.
     """
