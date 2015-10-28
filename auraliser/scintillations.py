@@ -167,9 +167,12 @@ def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
 
     # Include log-amplitude saturation
     if include_saturation:
-        sat_distance = saturation_distance(mean_mu_squared, wavenumber, scale)
-        log_amplitude *=  (np.sqrt( 1.0 / (1.0 + distance/sat_distance) ) )
-
+        if covariance == 'gaussian':
+            mean_mu_squared = kwargs['mean_mu_squared']
+            sat_distance = saturation_distance(mean_mu_squared, wavenumber, scale)
+            log_amplitude *=  (np.sqrt( 1.0 / (1.0 + distance/sat_distance) ) )
+        else:
+            raise ValueError("Cannot include saturation for given covariance function.")
     # Calculate phase fluctuations
     noise = state.randn(samples*2-1)
     phase = fftconvolve(noise, ir, mode='valid')
