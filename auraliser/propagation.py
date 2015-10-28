@@ -316,36 +316,15 @@ def _spatial_separation(A, B, C):
     Each row is a sample and each column a spatial dimension.
 
     """
-    #B = B[None,:]
-    #print(type(A))
-    #print(type(B))
-    #print(type(C))
-    #print(A.shape, B.shape, C.shape)
-    a = norm(B-C)#.norm()
-    #A = A.asarray()
-    #B = B.asarray()
-    #C = C.asarray()
-    b = norm(A-C)
-    #print(A, B)
-    c = norm(A-B)
-    #print((A-).shape)
-    #print(a)
-    #print(b)
-    #print((A-B).shape)
-
     a = np.linalg.norm(B-C, axis=1)
     b = np.linalg.norm(A-C, axis=1)
     c = np.linalg.norm(A-B, axis=1)
 
-    #print(a, b, c)
     gamma = np.arccos((a**2.0+b**2.0-c**2.0) / (2.0*a*b))
-    #print(gamma)
     spatial_separation = 2.0 * b * np.sin(gamma/2.0)
     L = b * np.cos(gamma/2.0)
+
     return spatial_separation, L
-    #spatial_separation = 2.0 * a * np.tan(gamma/2.0)
-    #dr = a - b
-    #return spatial_separation, dr
 
 
 
