@@ -95,7 +95,8 @@ def generate_gaussian_fluctuations(samples, spatial_separation, distance, wavenu
     :param scale: Outer length scale.
     :param window: Window function. See also :func:`impulse_response_fluctuations`.
     :param include_saturation: Include saturation of log-amplitude.
-    :param seed: Seed for random number generator.
+    :param state: State of random number generator.
+    :type: :class:`np.random.RandomState`
     :returns: Log-amplitude array and phase array.
 
     This generates one serie of each.
@@ -110,8 +111,7 @@ def generate_gaussian_fluctuations(samples, spatial_separation, distance, wavenu
 
     ir = impulse_response_fluctuations(covariance, window=window)
 
-    state = np.random.RandomState(seed)
-    np.random.seed(seed)
+    state = state if state else np.random.RandomState()
 
     noise = state.randn(samples*2-1)
     log_amplitude = fftconvolve(noise, ir, mode='valid')
@@ -132,9 +132,8 @@ COVARIANCES = {
     }
 
 def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
-                          scale, seed=None, window=None,
+                          scale, state=None, window=None,
                           covariance='gaussian', **kwargs):
-
 
     try:
         covariance_func = COVARIANCES[covariance]
@@ -145,7 +144,7 @@ def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
         include_saturation = kwargs.pop('include_saturation')
     except KeyError:
         include_saturation = False
-        
+
     # Determine the covariance
     spatial_separation = np.ones(samples) * spatial_separation
     cov = covariance_func(spatial_separation=spatial_separation,
@@ -153,17 +152,17 @@ def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
                                  wavenumber=wavenumber,
                                  scale=scale, **kwargs)
 
-    cov -= cov[0]
+    #cov /= cov[0]
     # Create an impulse response using this covariance
     ir = impulse_response_fluctuations(cov, window=window)
 
-    # We need random numbers. Seed the generator and maintain the state.
-    state = np.random.RandomState(seed)
-    np.random.seed(seed)
+    # We need random numbers.
+    state = state if state else np.random.RandomState()
 
     # Calculate log-amplitude fluctuations
     noise = state.randn(samples*2-1)
     log_amplitude = fftconvolve(noise, ir, mode='valid')
+    #log_amplitude -= cov[0]
 
     # Include log-amplitude saturation
     if include_saturation:
@@ -240,6 +239,8 @@ def _apply_delay_turbulence(signal, delay, fs):
 def logamp_variance(amp):
     """Variance of log-amplitude fluctuations.
 
+    :param amp: Time-series of amplitude fluctuations, NOT log-amplitude.
+
     See Daigle, 1983: equation 15, 16 and 19.
     """
     return (np.log(amp/(amp.mean(axis=-1)[...,None]))**2.0).mean(axis=-1)
@@ -247,6 +248,8 @@ def logamp_variance(amp):
 
 def phase_variance(phase):
     """Variance of phase fluctuations.
+
+    :param phase: Time-series of phase fluctuations.
 
     See Daigle, equation 20.
     """
@@ -313,6 +316,8 @@ def phase_variance(phase):
     #return log_amplitude, phase
 
 
+
+
 def gaussian_fluctuations_variances(samples, f0, fs, mean_mu_squared,
                                     distance, scale,
                                     spatial_separation, soundspeed,
@@ -333,7 +338,7 @@ def gaussian_fluctuations_variances(samples, f0, fs, mean_mu_squared,
     """
     spatial_separation *= np.ones(samples)
     wavenumber = 2.0 * np.pi * f0 / soundspeed
-    a, p = generate_many_gaussian_fluctuations(samples, spatial_separation, distance,
+    a, p = generate_gaussian_fluctuations(samples, spatial_separation, distance,
                                                wavenumber, mean_mu_squared, scale,
                                                include_saturation=include_saturation,
                                                seed=seed)

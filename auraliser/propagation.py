@@ -314,347 +314,68 @@ def _spatial_separation(A, B, C):
     return spatial_separation, L
 
 
-
-
-#def moving_average(a, n=3) :
-    #ret = np.cumsum(a, dtype=float)
-    #ret[n:] = ret[n:] - ret[:-n]
-    #return ret[n - 1:] / n
-
-#def apply_turbulence_vonkarman(signal, fs, mean_mu_squared, r, scale, spatial_separation, Cv, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
-
-    ##cutoff = fs/2.0 * 0.3
-    ##signal = lowpass(signal, fs, cutoff)
-
-    ##spatial_separation /= 1000000.0
-
-    ##print(len(spatial_separation))
-    ##n = 2000
-    ##spatial_separation = moving_average(spatial_separation, n=n)
-    ##spatial_separation = np.hstack((spatial_separation, np.ones(n-1)*spatial_separation[-1]))
-    ##print(len(spatial_separation))
-
-    ##print(spatial_separation)
-    ##spatial_separation = np.abs( np.random.randn(len(signal)) * 0.0001 )
-    ##print(spatial_separation)
-
-    #modulation_frequencies = 10.0
-    #samples = len(signal)
-    #B = covariance_von_karman(modulation_frequencies, soundspeed, spatial_separation, r, scale, Cv, steps=50)
-    #auto = np.abs(fft(B))#, n=samples))).real # Autospectrum, however, still double-sided
-    #ir = np.fft.ifftshift((ifft(np.sqrt(auto)).real), axes=-1) #
-    #ir *= 2.0
-    #n = samples * 2 - 1
-
-    #np.random.seed(seed)
-
-    #from acoustics.signal import power_spectrum
-
-    #if include_amplitude:
-        #n1 = np.random.randn(n)
-        #logamp = fftconvolve(n1, ir, mode='valid')
-
-        ##n = 500
-        ##logamp = moving_average(logamp, n=n)
-        ##logamp = np.hstack((logamp, np.ones(n-1)*logamp[-1]))
-
-        ##logamp = lowpass(logamp, fs, cutoff, order=1)
-        ##print(power_spectrum(logamp, fs)[1])
-        #signal = signal * logamp
-
-    #if include_phase:
-        #n2 = np.random.randn(n)
-        #phase = fftconvolve(n2, ir, mode='valid')
-        #delay = phase/(2.0*np.pi*modulation_frequencies)
-        #signal = apply_delay_turbulence(signal, delay, fs)
-    #return signal
-
-#def apply_turbulence(signal, fs, mean_mu_squared, r, scale, spatial_separation, Cv, soundspeed=343.0, fraction=3, order=1, include_saturation=True, include_amplitude=True, include_phase=True, seed=None):
-    #"""Apply turbulence to signal.
-
-    #:param signal: Original signal
-    #:param fs: Sample frequency
-    #:param mean_mu_squared: Dynamic refractive index squared.
-    #:param r: Distance.
-    #:param scale: Correlation length / Outer length scale.
-    #:param spatial_separation: Spatial separation.
-    #:param soundspeed: Speed of sound.
-    #:param fraction: Fraction of octaves.
-    #:param order: Order of bandpass filters.
-    #:param include_saturation: Include saturation.
-    #:param include_amplitude: Include amplitude modulations.
-    #:param include_phase: Include phase modulations.
-    #:param seed: Seed for random number generator.
-
-    #"""
-    #samples = len(signal)
-    #ob = OctaveBand(fstart=5.0, fstop=fs / 2.0, fraction=fraction)
-    #ob = OctaveBand.from_bands( ob[ ob.upper < fs / 2.0 ] )
-    #print(ob)
-
-    #fb = Filterbank(ob, sample_frequency=fs, order=order)
-
-    ## Modulation frequencies.
-    #modulation_frequencies = ob.center
-
-    ## Amount of signals.
-    #N = len(modulation_frequencies)
-
-    ## Bandpass filtered input signal.
-    #signals = np.empty((N, samples), dtype='float64')
-    #for i, s in enumerate(fb.filtfilt(signal)):
-        #signals[i,:] = s
-    #del signal#del ob, fb
-    ## Wavenumber
-    #k = 2.0 * np.pi * modulation_frequencies / soundspeed
-
-    ## Calculate correlation
-    #B = np.empty_like(signals)
-    #for i, f in enumerate(ob.center):
-        #B[i,:] = covariance_von_karman(f, soundspeed, spatial_separation, r, L, Cv)
-    ##B = covariance_von_karman(ob.center, soundspeed, spatial_separation, r, L, Cv)
-
-    ##print(B)
-    ##B += (spatial_separation!=0.0) * np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (k*k)[:,None] * r[None,:] * L * (erf(spatial_separation/L) / (spatial_separation/L))[None,:] ) )
-    ##B += (spatial_separation==0.0) * np.sqrt(np.pi)/2.0 * mean_mu_squared * (k*k)[:,None]* r[None,:] * L
-    #np.save("B.npy", B)
-    ## Seed random numbers generator.
-    #np.random.seed(seed)
-    #n = samples * 2 - 1
-    ##n = samples
-
-    ## Autospectrum of correlation.
-    #auto = np.abs(fft(B))#, n=samples))).real # Autospectrum, however, still double-sided
-    #del B, spatial_separation
-
-    #np.save("auto.npy", auto)
-
-
-    ## The autospectrum is real-valued. Taking the inverse DFT results in complex and symmetric values."""
-    #ir = np.fft.ifftshift((ifft(np.sqrt(auto)).real), axes=-1) #
-    #ir = 2.0 * ir[:, 0:samples] # Only take half the IR to have right amount of samples.
-    ##ir *= np.hanning(ir.shape[-1])[None,:]
-    ##ir[0] /= 2.0
-    #del auto
-    #np.save("ir.npy", ir)
-
-    #if include_amplitude:
-        ## Generate random numbers.
-        #n1 = np.random.randn(n)
-        #n1 = np.tile(n1, (N,1))
-        ##ir[:,samples/2] = ir[:,samples/2+1]
-        #log_amplitude = fftconvolve1D(n1, ir, mode='valid') # Log-amplitude fluctuations
-        ##log_amplitude = fftconvolve1D(n1, ir[:,n/2-5:n/2+5], mode='same')
-        ##print(log_amplitude.shape)
-        #del n1
-        #if not include_phase:
-            #del ir
-        ## Apply amplitude saturation
-        ##if include_saturation:
-            ##saturation_distance = 1.0 / (2.0 * mean_mu_squared * k*k * L)
-            ##log_amplitude *=  np.sqrt( 1.0 / (1.0 + r[None,:]/saturation_distance[:,None]) )
-            ##del saturation_distance
-        ## Apply fluctuations
-        #print(np.exp(log_amplitude).max())
-        #signals *= np.exp(log_amplitude)
-        #del log_amplitude
-
-    #if include_phase:
-        ## Generate random numbers.
-        #n2 = np.random.randn(n)
-        #n2 = np.tile(n2, (N,1))
-
-        #phase = fftconvolve1D(n2, ir, mode='valid')           # Phase fluctuations
-        ##phase = fftconvolve1D(n2, ir[:,n/2-50:n/2+50], mode='same')
-        #del n2, ir
-        ## Apply fluctuations
-        #delay = phase/(2.0*np.pi*modulation_frequencies)[:,None]
-        #print(delay.max())
-        #print(delay.min())
-        #for i in range(N):
-            #signals[i] = apply_delay_turbulence(signals[i], delay[i], fs)
-            ##signals[i] = map_source_to_receiver(signals[i], delay[i], fs)
-        #del delay
-
-    #return signals.sum(axis=0)
-
-
-#def apply_turbulence_gaussian(signal, fs, mean_mu_squared, distance, scale,
-                              #spatial_separation, soundspeed=343.0,
-                              #fraction=1, order=8, include_saturation=True,
-                              #include_amplitude=True, include_phase=True,
-                              #seed=None):
-    #"""Apply turbulence to signal.
-
-    #:param signal: Original signal
-    #:param fs: Sample frequency
-    #:param mean_mu_squared: Dynamic refractive index squared.
-    #:param distance: Distance.
-    #:param scale: Correlation length / Outer length scale.
-    #:param spatial_separation: Spatial separation.
-    #:param soundspeed: Speed of sound.
-    #:param fraction: Fraction of octaves.
-    #:param order: Order of bandpass filters.
-    #:param include_saturation: Include saturation.
-    #:param include_amplitude: Include amplitude modulations.
-    #:param include_phase: Include phase modulations.
-    #:param seed: Seed for random number generator.
-    #:returns: The original signal but with fluctuations applied to it.
-
-    #"""
-    #signal = Signal(signal, fs)
-    #samples = signal.samples
-
-    #frequencies, signals = signal.fractional_octaves(fraction=fraction, order=order, purge=True, zero_phase=True)
-    #del signal
-    #modulation_frequencies = frequencies.center
-
-    ### Amount of signals.
-    #n_signals = len(modulation_frequencies)
-
-    ## Wavenumber
-    #k = 2.0 * np.pi * modulation_frequencies / soundspeed
-
-    ## Calculate covariance
-    #covariance = np.zeros_like(signals)
-
-    #covariance += (spatial_separation!=0.0) * \
-                  #np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (k*k)[:,None] * \
-                  #distance[None,:] * scale * (erf(spatial_separation/scale) / \
-                  #(spatial_separation/scale))[None,:] ) )
-
-    #covariance += (spatial_separation==0.0) * np.sqrt(np.pi)/2.0 * \
-                  #mean_mu_squared * (k*k)[:,None]* distance[None,:] * scale
-
-    ## Autospectrum of correlation.
-    #auto = np.abs(fft(covariance)) # Autospectrum, however, still double-sided
-    #del covariance, spatial_separation
-
-    ## The autospectrum is real-valued. Taking the inverse DFT results in complex and symmetric values."""
-    #ir = np.fft.ifftshift((ifft(np.sqrt(auto)).real), axes=-1) #
-    #ir = 2.0 * ir[:, 0:samples] # Only take half the IR to have right amount of samples.
-
-    ##if window is not None:
-        ##ir *= window(samples)[...,:]
-    ##ir *= np.hamming(samples) # Seems to reduce high-frequent noise. Caused by small discontinueties?
-
-    #del auto
-
-    ## Seed random numbers generator.
-    #np.random.seed(seed)
-
-    ## Amount of noise samples required for the convolution
-    #n_noise_samples = samples * 2 - 1
-
-    #if include_amplitude:
-        ## Generate random numbers.
-        #noise = np.random.randn( n_noise_samples)
-        #noise = np.tile(noise, (n_signals, 1))
-
-        ## Log-amplitude fluctuations. Convolution of noise with impulse response
-        #log_amplitude = fftconvolve1D(noise, ir, mode='valid')
-        #del noise
-
-        #if not include_phase:
-            #del ir
-
-        ## Apply amplitude saturation
-        #if include_saturation:
-            #saturation_distance = 1.0 / (2.0 * mean_mu_squared * k*k * scale)
-            #log_amplitude *=  np.sqrt( 1.0 / (1.0 + r[None,:]/saturation_distance[:,None]) )
-            #del saturation_distance
-
-        ## Apply fluctuations
-        #signals *= np.exp(log_amplitude)
-        #del log_amplitude
-
-    #if include_phase:
-        ## Generate random numbers.
-        #noise = np.random.randn( n_noise_samples)
-        #noise = np.tile(noise, (n_signals, 1))
-        #phase = fftconvolve1D(noise, ir, mode='valid')           # Phase fluctuations
-        #del noise, ir
-        ## Apply fluctuations
-        #delay = phase/(2.0*np.pi*modulation_frequencies)[:,None]
-        #for i in range(n_signals):
-            ## Apply delay by resampling the signal. Uses linear interpolation.
-            #signals[i] = apply_delay_turbulence(signals[i], delay[i], fs)
-        #del delay
-
-    #return signals.sum(axis=0) # Sum over the contribution of every band
-
-
 from auraliser.scintillations import generate_fluctuations, apply_fluctuations
 
-def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed, scale, include_logamp, include_phase, seed=None, window=None, **kwargs):
+def _generate_and_apply_fluctuations(signal, fs, frequency, spatial_separation,
+                                     distance, soundspeed, scale, include_logamp, include_phase,
+                                     state=None, window=None, **kwargs):
+    """Apply fluctuations to a signal.
+    """
+    wavenumber = 2.0 * np.pi * frequency / soundspeed
+    samples = len(signal)
+    log_amplitude, phase = generate_fluctuations(samples=samples,
+                                                 spatial_separation=spatial_separation,
+                                                 distance=distance,
+                                                 wavenumber=wavenumber,
+                                                 scale=scale,
+                                                 window=None,
+                                                 state=state,
+                                                 **kwargs
+                                                 )
+
+    if not include_logamp:
+        log_amplitude = None
+    if not include_phase:
+        phase = None
+    return apply_fluctuations(signal, fs, frequency=frequency, log_amplitude=log_amplitude, phase=phase).calibrate_to(signal.leq())
+
+
+def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed,
+                     scale, include_logamp, include_phase, state=None, window=None, **kwargs):
+    """Apply turbulence to propagation.
+    """
+    # Upsample data
+    factor = 5
     signal = Signal(signal, fs)
-    frequencies, signals = signal.fractional_octaves(fraction=fraction, order=order, purge=True, zero_phase=True)
+    #upsampled = signal.upsample(factor)
+    from scipy.interpolate import interp1d
+    from acoustics.signal import OctaveBand
+    from acoustics.standards.iec_61672_1_2013 import NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES
+    from copy import copy
+
+    #spatial_separation = interp1d(signal.times(), spatial_separation)(np.linspace(0.0, signal.times().max(), upsampled.samples))
+    #distance = interp1d(signal.times(), distance)(np.linspace(0.0, signal.times().max(), upsampled.samples))
+
+    frequencies = OctaveBand(fstart=NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES[0], fstop=signal.fs/2.0, fraction=fraction)
+
+    #signal = upsampled
+    frequencies, signals = signal.bandpass_frequencies(frequencies, order=order, purge=True, zero_phase=True)
     samples = len(signal)
     del signal
 
+    state = state if state else np.random.RandomState()
 
-    modulated = list()
-    # Generate modulations for each band.
-    for modulation_frequency, filtered in zip(frequencies.center, signals):
-        logging.info("apply_turbulence: Generating fluctuations for {} Hz".format(modulation_frequency))
-        wavenumber = 2.0 * np.pi * modulation_frequency / soundspeed
-        log_amplitude, phase = generate_fluctuations(samples=samples,
-                                                     spatial_separation=spatial_separation,
-                                                     distance=distance,
-                                                     wavenumber=wavenumber,
-                                                     scale=scale,
-                                                     #include_saturation=include_saturation,
-                                                     window=None,
-                                                     seed=seed,
-                                                     **kwargs
-                                                     #covariance=covariance,
-                                                     #mean_mu_squared=mean_mu_squared,
-                                                     #soundspeed=soundspeed,
-                                                     #wind_speed_variance=wind_speed_variance,
-                                                     )
-        if not include_logamp:
-            log_amplitude = None
-        if not include_phase:
-            phase = None
-        modulated.append(apply_fluctuations(filtered, filtered.fs, frequency=modulation_frequency, log_amplitude=log_amplitude, phase=phase))
-
-    return Signal(modulated, fs).sum(axis=0)
-
-
-#def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed, scale, include_logamp, include_phase, seed=None, window=None, **kwargs):
-    #frequencies, signals = signal.fractional_octaves(fraction=fraction, order=order, purge=True, zero_phase=True)
-    #samples = len(signal)
-    ##del signal
-
-
-    #modulation_frequency = 1000.0
-    ## Generate modulations for each band.
-    ##for modulation_frequency, filtered in zip(frequencies.center, signals):
-        ##logging.info("apply_turbulence: Generating fluctuations for {} Hz".format(modulation_frequency))
-    #wavenumber = 2.0 * np.pi * modulation_frequency / soundspeed
-    #log_amplitude, phase = generate_fluctuations(samples=samples,
-                                                #spatial_separation=spatial_separation,
-                                                #distance=distance,
-                                                #wavenumber=wavenumber,
-                                                #scale=scale,
-                                                ##include_saturation=include_saturation,
-                                                #window=None,
-                                                #seed=seed,
-                                                #**kwargs
-                                                ##covariance=covariance,
-                                                ##mean_mu_squared=mean_mu_squared,
-                                                ##soundspeed=soundspeed,
-                                                ##wind_speed_variance=wind_speed_variance,
-                                                #)
-    #if not include_logamp:
-        #log_amplitude = None
-    #if not include_phase:
-        #phase = None
-    #modulated = apply_fluctuations(signal, fs, frequency=modulation_frequency, log_amplitude=log_amplitude, phase=phase)
-
-    #return Signal(modulated, fs)#.sum(axis=0)
-
-
+    modulated = map(lambda frequency, signal: _generate_and_apply_fluctuations(signal, fs, frequency,
+                                                                               spatial_separation=spatial_separation,
+                                                                               distance=distance,
+                                                                               soundspeed=soundspeed,
+                                                                               include_logamp=include_logamp,
+                                                                               include_phase=include_phase,
+                                                                               scale=scale,
+                                                                               window=None,
+                                                                               state=copy(state),
+                                                                               **kwargs), frequencies.center, signals)
+    return Signal(sum(modulated), fs)#.decimate(factor, zero_phase=True)
 
 
 
@@ -769,22 +490,3 @@ def interpolation_lanczos(signal, times, fs, a=10):
     samples = -times * fs + np.arange(len(signal))
     #samples[samples < 0.0] = 0.0 # This is the slowest part.
     return _lanczos_resample(signal, samples, np.zeros_like(signal), a)
-
-
-#@numba.jit(nogil=True)
-#def _lanczos_resample(signal, delay, output, a, fs):
-    #"""Sample signal at float samples.
-    #"""
-    #for index in range(len(signal)):#, x in enumerate(samples):
-        #x = -delay[index] * fs + index
-        #if x < 0.0:
-            #x = 0.0
-        #for i in range(math.floor(x)-a+1, math.floor(x+a)):
-            #output[index] += signal[i] * _lanczos_window(x-i, a)
-    #return output
-
-
-
-
-
-

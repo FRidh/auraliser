@@ -505,38 +505,10 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     if settings['turbulence']['include']:
         logging.info("_apply_propagation_effects: Applying turbulence.")
 
-        if settings['turbulence']['spatial_separation']:
-            #spatial_separation, dr = auraliser.propagation._spatial_separation(source, (np.random.randn(3))[None,:], receiver)
-            #spatial_separation, dr = auraliser.propagation._spatial_separation(source, (source[0]+np.random.randn(3))[None,:], receiver)
-            #rho, dr = auraliser.propagation._spatial_separation(source, source[0][None,:], receiver[None,:])
-            #rho = norm(source.asarray() - source.asarray()[0])
-            #turbulence_distance = distance + dr
-            #spatial_separation = np.linalg.norm( np.gradient(source)[0], axis=1 )
-            source_t = source[1:,:]
-            source_t = np.append(source_t, np.expand_dims(source_t[-1], axis=0), axis=0)
-            spatial_separation, turbulence_distance = auraliser.propagation._spatial_separation(source, source_t, receiver)
-        else:
-            #spatial_separation = np.zeros_like(signal)
-            #spatial_separation =
-            speed = np.linalg.norm(np.gradient(source)[0],axis=-1)
-            spatial_separation = speed / fs
-            turbulence_distance = distance
-
-        if settings['turbulence']['distance'] is not None:
-            turbulence_distance = settings['turbulence']['distance']
-
-        #spatial_separation = distance / fs
-        ##print(rho)
-        ###rho = np.ones_like(rho) * rho.mean()
-        #rho = np.abs(rho)
-        ##rho = np.ones_like(rho)
-        ##print(np.abs(rho))
-        #from .propagation import moving_average
-        #n = 1000
-        #rho = moving_average(rho, n=n)
-        #rho = np.hstack((rho, np.ones(n-1)*rho[-1]))
-        #print(rho)
-        print(turbulence_distance)
+        # Determine spatial seperation and source-receiver distance
+        source_t = source[1:,:]
+        source_t = np.append(source_t, np.expand_dims(source_t[-1], axis=0), axis=0)
+        spatial_separation, turbulence_distance = auraliser.propagation._spatial_separation(source, source_t, receiver)
 
         signal = auraliser.propagation.apply_turbulence(signal=signal,
                                                         fs=fs,
@@ -548,51 +520,13 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                                         scale=settings['turbulence']['correlation_length'],
                                                         include_logamp=settings['turbulence']['amplitude'],
                                                         include_phase=settings['turbulence']['phase'],
-                                                        seed=settings['turbulence']['random_seed'],
+                                                        #seed=settings['turbulence']['random_seed'],
                                                         # Model specific below
                                                         covariance=settings['turbulence']['covariance'],
                                                         include_saturation=settings['turbulence']['saturation'],
                                                         mean_mu_squared=settings['turbulence']['mean_mu_squared'],
                                                         wind_speed_variance=settings['turbulence']['variance_windspeed'],
                                                         )
-
-        #if settings['turbulence']['model'] == 'gaussian':
-            #signal = auraliser.propagation.apply_turbulence_gaussian(signal,
-                                                            #fs,
-                                                            #settings['turbulence']['mean_mu_squared'],
-                                                            #turbulence_distance,
-                                                            #settings['turbulence']['correlation_length'],
-                                                            #rho,
-                                                            #atmosphere.soundspeed,
-                                                            #settings['turbulence']['fraction'],
-                                                            #settings['turbulence']['order'],
-                                                            #settings['turbulence']['saturation'],
-                                                            #settings['turbulence']['amplitude'],
-                                                            #settings['turbulence']['phase'],
-                                                            #settings['turbulence']['random_seed'],
-                                                            #)
-            #del rho
-
-        #elif settings['turbulence']['model'] == 'vonkarman':
-            #rho = np.ones_like(rho)
-            #signal = auraliser.propagation.apply_turbulence_vonkarman(signal,
-                                                            #fs,
-                                                            #settings['turbulence']['mean_mu_squared'],
-                                                            #turbulence_distance,
-                                                            #settings['turbulence']['correlation_length'],
-                                                            #rho,
-                                                            #settings['turbulence']['variance_windspeed'],
-                                                            #atmosphere.soundspeed,
-                                                            #settings['turbulence']['fraction'],
-                                                            #settings['turbulence']['order'],
-                                                            #settings['turbulence']['saturation'],
-                                                            #settings['turbulence']['amplitude'],
-                                                            #settings['turbulence']['phase'],
-                                                            #settings['turbulence']['random_seed'],
-                                                            #)
-
-        #else:
-            #raise ValueError("Turbulence model '{}' does not exist".format(settings['turbulence']['model']))
 
 
     # Apply atmospheric absorption.
@@ -1055,11 +989,10 @@ _DEFAULT_SETTINGS = {
         'mean_mu_squared'   :   3.0e-6,
         'correlation_length':   1.0,
         'variance_windspeed':   0.03,
-        'saturation'        :   False,  # Include log-amplitude saturation
+        'saturation'        :   True,  # Include log-amplitude saturation
         'amplitude'         :   True,   # Amplitude modulations
         'phase'             :   True,   # Phase modulations
         'spatial_separation':   True,
-        'distance'          :   None,
         'fraction'          :   1,      # Fraction of filter
         'order'             :   8,      # Order of filter
         'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
