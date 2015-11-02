@@ -856,7 +856,7 @@ class Virtualsource(Base):
     Class for modelling specific spectral components within a :class:`Auraliser.SubSource` that have the same directivity.
     """
 
-    def __init__(self, auraliser, name, subsource, signal, rotation=None, directivity=None, gain=0.0, multipole=0):
+    def __init__(self, auraliser, name, subsource, signal, rotation=None, directivity=None, level=94.0, multipole=0):
         """Constructor.
         """
 
@@ -872,8 +872,8 @@ class Virtualsource(Base):
         """
         Amplitude modulation of the signal in Hz.
         """
-        self.gain = gain
-        """Gain of the signal in decibel.
+        self.level = level
+        """Level of the signal in decibel.
         """
 
         self._signal_generated = None
@@ -913,7 +913,7 @@ class Virtualsource(Base):
     def generate_signal(self):
         t = self.subsource.source._auraliser.duration
         fs = self.subsource.source._auraliser.sample_frequency
-        self._signal_generated = Signal(self.signal.output(t, fs), fs).gain(self.gain)
+        self._signal_generated = Signal(self.signal.output(t, fs), fs).calibrate_to(self.level)
 
     def emission(self, orientation):
         """The signal this :class:`Virtualsource` emits as function of orientation.
