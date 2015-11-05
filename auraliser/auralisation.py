@@ -311,7 +311,7 @@ class Auraliser(object):
         .. note:: Mirror receivers are calculated instead of mirror sources.
         """
         logging.info("_get_mirror_sources_from_ism: Determining mirrors sources.")
-        model = ism.Model(self.geometry.walls, receiver, source, max_order=self.settings['reflections']['order_threshold'])
+        model = ism.Model(self.geometry.walls, source=receiver, receiver=source, max_order=self.settings['reflections']['order_threshold'])
         mirrors = model.determine(strongest=self.settings['reflections']['mirrors_threshold'])
         yield from mirrors
 
