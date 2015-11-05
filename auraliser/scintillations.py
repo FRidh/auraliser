@@ -109,9 +109,6 @@ def impulse_response_fluctuations(covariance, window=None):
     del autospectrum
     ir[...,1:] *= 2.0 # Conservation of power
 
-    # Remove extra sample that we added in case of uneven amount of samples.
-    if samples%2:
-        ir = ir[..., -1]
     # Apply window
     if window is not None:
         ir *= window(samples)[...,:]
