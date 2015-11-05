@@ -321,7 +321,7 @@ def phase_variance(phase):
 def gaussian_fluctuations_variances(samples, f0, fs, mean_mu_squared,
                                     distance, scale,
                                     spatial_separation, soundspeed,
-                                    include_saturation=True, seed=None):
+                                    include_saturation=True, state=None):
     """Calculate the variances of fluctuations in the time series of amplitude and phase fluctuations.
 
     :param samples: Amount of samples to take.
@@ -333,7 +333,7 @@ def gaussian_fluctuations_variances(samples, f0, fs, mean_mu_squared,
     :param rho: Spatial separation.
     :param soundspeed: Speed of sound.
     :param include_phase: Include phase fluctuations.
-    :param seed: Seed for numpy random number generator.
+    :param state: State of numpy random number generator.
 
     """
     spatial_separation *= np.ones(samples)
@@ -341,7 +341,7 @@ def gaussian_fluctuations_variances(samples, f0, fs, mean_mu_squared,
     a, p = generate_gaussian_fluctuations(samples, spatial_separation, distance,
                                                wavenumber, mean_mu_squared, scale,
                                                include_saturation=include_saturation,
-                                               seed=seed)
+                                               state=state)
 
     return logamp_variance(np.exp(a)), phase_variance(p)
 
