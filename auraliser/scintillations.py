@@ -17,6 +17,33 @@ from auraliser._fftconvolve import fftconvolve1D
 
 from turbulence.vonkarman import covariance_wind as covariance_vonkarman_wind
 
+
+def variance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared):
+    """Variance of Gaussian fluctuations.
+
+    :param spatial_separation: Spatial separation.
+    :param distance: Distance.
+    :param wavenumber: Wavenumber.
+    :param mean_mu_squared: Mean mu squared.
+    :param scale: Outer length scale.
+    :returns: Variance
+
+    """
+    return np.sqrt(np.pi)/2.0 * mean_mu_squared * wavenumber**2.0 * distance * scale
+
+def correlation_spherical_wave(spatial_separation, scale):
+    """Correlation of spherical waves.
+
+    :param spatial_separation: Spatial separation.
+    :param scale: Outer length scale.
+    :returns: Correlation
+    """
+    x = spatial_separation/scale
+    cor = np.sqrt(np.pi) / 2.0 * erf(x)/x
+    cor[x==0.0] = 1.0
+    return cor
+
+
 def covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared, **kwargs):
     """Calculate the covariance of a Gaussian turbulence spectrum and spherical waves.
 
@@ -32,14 +59,17 @@ def covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu
     .. math:: B{\chi} (\rho) = B{S}(\rho) = \\frac{\\sqrt{\\pi}}{2} \\langle \\mu^2 \\rangle k^2 r L \\frac{\\Phi(\\rho/L) }{\\rho / L}
 
     """
-    covariance = 0.0
-    covariance += (spatial_separation!=0.0) * \
-                  np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (wavenumber*wavenumber) * \
-                  distance * scale * (erf(spatial_separation/scale) / \
-                  (spatial_separation/scale) ) ) )
+    #covariance = 0.0
+    #covariance += (spatial_separation!=0.0) * \
+                  #np.nan_to_num( ( np.pi/4.0 * mean_mu_squared * (wavenumber*wavenumber) * \
+                  #distance * scale * (erf(spatial_separation/scale) / \
+                  #(spatial_separation/scale) ) ) )
 
-    covariance += (spatial_separation==0.0) * np.sqrt(np.pi)/2.0 * \
-                  mean_mu_squared * (wavenumber*wavenumber) * distance * scale
+    #covariance += (spatial_separation==0.0) * np.sqrt(np.pi)/2.0 * \
+                  #mean_mu_squared * (wavenumber*wavenumber) * distance * scale
+    cor = correlation_spherical_wave(spatial_separation, scale)
+    var = variance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared)
+    covariance = cor * var
 
     return covariance
 
