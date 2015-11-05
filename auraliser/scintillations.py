@@ -98,9 +98,6 @@ def impulse_response_fluctuations(covariance, window=None):
 
     """
     samples = covariance.shape[-1]
-    # If we have an uneven amount of samples, then append a zero.
-    if samples%2:
-        covariance = np.append(covariance, covariance[-1])
     autospectrum = np.abs(np.fft.rfft(covariance)) # Autospectrum
     del covariance
 
