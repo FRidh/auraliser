@@ -507,7 +507,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
 
         # Determine spatial seperation and source-receiver distance
         source_t = source[1:,:]
-        source_t = np.append(source_t, np.expand_dims(source_t[-1], axis=0), axis=0)
+        source_t = np.append(source_t, np.expand_dims(source_pos_1[-1]+np.diff(source_pos, axis=0)[-1] , axis=0), axis=0)
         spatial_separation, turbulence_distance = auraliser.propagation._spatial_separation(source, source_t, receiver)
 
         signal = auraliser.propagation.apply_turbulence(signal=signal,
