@@ -114,7 +114,7 @@ def impulse_response_fluctuations(covariance, window=None):
 
 def generate_gaussian_fluctuations(samples, spatial_separation, distance, wavenumber,
                                    mean_mu_squared, scale, window=None,
-                                   include_saturation=False, seed=None):
+                                   include_saturation=False, state=None):
     """Generate time series of log-amplitude and phase fluctuations.
 
     :param samples: Length of series of fluctuations.
