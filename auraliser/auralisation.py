@@ -526,6 +526,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                                         include_saturation=settings['turbulence']['saturation'],
                                                         mean_mu_squared=settings['turbulence']['mean_mu_squared'],
                                                         wind_speed_variance=settings['turbulence']['variance_windspeed'],
+                                                        window=['turbulence']['window']
                                                         )
 
 
@@ -997,6 +998,7 @@ _DEFAULT_SETTINGS = {
         'order'             :   8,      # Order of filter
         'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
         'covariance'             :   'gaussian',
+        'window'            :   None,
         },
     'plot':{
         'general':{

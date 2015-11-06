@@ -328,7 +328,7 @@ def _generate_and_apply_fluctuations(signal, fs, frequency, spatial_separation,
                                                  distance=distance,
                                                  wavenumber=wavenumber,
                                                  scale=scale,
-                                                 window=None,
+                                                 window=window,
                                                  state=state,
                                                  **kwargs
                                                  )
