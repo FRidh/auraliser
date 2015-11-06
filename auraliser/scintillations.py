@@ -102,7 +102,7 @@ def impulse_response_fluctuations(covariance, window=None):
     del covariance
 
     # The autospectrum is real-valued. Taking the inverse DFT results in complex and symmetric values."""
-    ir = np.fft.ifftshift((np.fft.irfft(np.sqrt(autospectrum)).real), axes=-1)
+    ir = np.fft.ifftshift((np.fft.irfft(np.sqrt(autospectrum), n=samples).real), axes=-1)
     del autospectrum
     ir[...,1:] *= 2.0 # Conservation of power
 
