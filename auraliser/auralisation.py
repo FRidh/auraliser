@@ -526,7 +526,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                                         include_saturation=settings['turbulence']['saturation'],
                                                         mean_mu_squared=settings['turbulence']['mean_mu_squared'],
                                                         wind_speed_variance=settings['turbulence']['variance_windspeed'],
-                                                        window=['turbulence']['window']
+                                                        window=settings['turbulence']['window']
                                                         )
 
 
