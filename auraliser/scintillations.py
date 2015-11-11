@@ -38,7 +38,7 @@ def correlation_spherical_wave(spatial_separation, scale):
     :param scale: Outer length scale.
     :returns: Correlation
     """
-    x = spatial_separation/scale
+    x = np.atleast_1d(spatial_separation/scale)
     cor = np.sqrt(np.pi) / 2.0 * erf(x)/x
     cor[x==0.0] = 1.0
     return cor

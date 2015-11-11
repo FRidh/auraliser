@@ -133,6 +133,13 @@ class Auraliser(object):
     An auraliser object contains the model for simulating how :attr:`sources` sound at :attr:`receivers` for a given :attr:`atmosphere`.
     """
 
+    def __new__(cls, *args, **kwargs):
+        obj = super().__new__(cls)
+        obj._objects = list()
+        """List with all objects in model.
+        """
+        return obj
+
     def __init__(self, duration, sample_frequency=44100.0, atmosphere=None, geometry=None, settings=None):
         """
         Constructor.
@@ -156,11 +163,6 @@ class Auraliser(object):
         Atmosphere described by :class:`Auraliser.Atmosphere.Atmosphere`.
         """
 
-        self._objects = list()
-        """
-        List of :class:`Auraliser.Auraliser.Source`s.
-        """
-
         self.duration = duration
         """
         Duration of auralisation.
@@ -174,6 +176,9 @@ class Auraliser(object):
         """
         Geometry of the model described by :class:`Geometry`.
         """
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__ and self.__class__ == other.__class__
 
 
     def __del__(self):
@@ -191,7 +196,7 @@ class Auraliser(object):
             if name == obj.name:
                 return obj
         else:
-            raise ValueError("Unknown name. Cannot get object.")
+            raise ValueError("Cannot get object. Unknown name {}. ".format(name))
 
     def get_object(self, name):
         """Get object by name.
@@ -201,15 +206,11 @@ class Auraliser(object):
         :returns: Proxy to `object`.
 
         """
-        name = name if isinstance(name, str) else name.name
-        for obj in self._objects:
-            if name == obj.name:
-                return weakref.proxy(obj)
-        else:
-            raise ValueError("Unknown name. Cannot get object.")
+        return weakref.proxy(self._get_real_object(name))
 
     def remove_object(self, name):
         """Delete object from model."""
+        name = name if isinstance(name, str) else name.name
         for obj in self._objects:
             if name == obj.name:
                 self._objects.remove(obj)
@@ -510,6 +511,8 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
         source_t = np.append(source_t, np.expand_dims(source_t[-1]+np.diff(source, axis=0)[-1] , axis=0), axis=0)
         spatial_separation, turbulence_distance = auraliser.propagation._spatial_separation(source, source_t, receiver)
 
+        #spatial_separation = np.cumsum(spatial_separation)
+
         signal = auraliser.propagation.apply_turbulence(signal=signal,
                                                         fs=fs,
                                                         fraction=settings['turbulence']['fraction'],
@@ -579,7 +582,6 @@ class Base(object):
         """Description of object.
         """
 
-
     def __del__(self):
         del self._auraliser
 
@@ -589,6 +591,9 @@ class Base(object):
 
     def __repr__(self):
         return "{}({})".format(self.__class__.__name__, str(self))
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__ and self.__class__ == other.__class__
 
     @property
     @abc.abstractmethod
@@ -934,30 +939,11 @@ _Mirror = namedtuple('Mirror', ['source_position', 'receiver_position',
 """Mirror container.
 """
 
-class Geometry(object):
-    """
-    Class describing the geometry of the model.
-    """
-
-    def __init__(self, walls=None):
-
-
-        self.walls = walls if walls else list()
-        """List of walls or faces.
-        """
-
-    def render(self):
-        """Render the geometry.
-        """
-        return render_geometry(self)
-
-
 
 def get_default_settings():
     d = dict()
     d = recursive_mapping_update(d, _DEFAULT_SETTINGS)
     return d
-
 
 _DEFAULT_SETTINGS = {
 
@@ -967,7 +953,7 @@ _DEFAULT_SETTINGS = {
         'order_threshold'   :   3,      # Maximum order of reflections
         'update_resolution' :   100,    # Update effectiveness every N samples.
         'taps'              :   256,     # Amount of filter taps for ifft mirror strength.
-        'force_hard'        :   False,  # Force hard reflections.
+        'force_hard'        :   True,  # Force hard reflections.
         },
     'doppler':{
         'include'           :   True,   # Include Doppler shift
@@ -997,7 +983,7 @@ _DEFAULT_SETTINGS = {
         'fraction'          :   1,      # Fraction of filter
         'order'             :   8,      # Order of filter
         'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
-        'covariance'             :   'gaussian',
+        'covariance'        :   'gaussian',
         'window'            :   None,
         },
     'plot':{
@@ -1034,34 +1020,45 @@ _DEFAULT_SETTINGS = {
     'directivity': {
         'update_resolution' :   100,    # Sample directivity every N samples. Needed for spherical harmonics.
         },
-
-
-
-        #'receivers' : {
-            #'mono'  :   [
-                #('M', 'Omni', ()),
-                #],
-            #'stereo':   [
-                #('L', 'Cardioid', ()),
-                #('
-                #],
-
-
-                    #],
-                #}
-            #'stereo' :
-
-
-
-
-            #}
-
     }
 """
 Default settings of :class:`Auraliser'.
 
 All possible settings are included.
 """
+
+
+class Geometry(object):
+    """
+    Class describing the geometry of the model.
+    """
+
+    def __init__(self, walls=None):
+
+
+        self.walls = walls if walls else list()
+        """List of walls or faces.
+        """
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__ and self.__class__ == other.__class__
+
+    def render(self):
+        """Render the geometry.
+        """
+        return render_geometry(self)
+
+    @classmethod
+    def ground(cls, nbins=get_default_settings()['reflections']['taps']):
+        corners = [Point(-1e5, -1e5, 0.0),
+                   Point(+1e5, -1e5, 0.0),
+                   Point(+1e5, +1e5, 0.0),
+                   Point(-1e5, +1e5, 0.0)
+                   ]
+        center = Point(0.0, 0.0, 0.0)
+        impedance = np.zeros(nbins, dtype='complex128')
+        g = ism.Wall(corners, center, impedance)
+        return cls(walls=[g])
 
 #def render_geometry(geometry):
     #"""

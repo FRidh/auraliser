@@ -1,22 +1,162 @@
 import pytest
 import numpy as np
+import tempfile
+import pickle
 
-from auraliser import Auraliser
+import auraliser
+
+from auraliser import Auraliser, Geometry
 
 from auraliser.propagation import apply_atmospheric_absorption
 
 from acoustics import Signal
 from acoustics.atmosphere import Atmosphere
 
+# Samples related
 
 @pytest.fixture(params=[12000.0, 22050.0])
 def fs(request):
     return request.param
 
+@pytest.fixture(params=[2.0, 10.0])
+def duration(request):
+    return request.param
 
-@pytest.fixture(params=[500.0, 1000.0, 4000.0])
+@pytest.fixture
+def samples(duration, fs):
+    return int(np.round(duration * fs))
+
+# Propagation related
+
+#@pytest.fixture
+#def model(duration, fs):
+    #return Auraliser(duration, sample_frequency=fs)
+
+@pytest.fixture(params=[None])#, Geometry(), Geometry.ground()])
+def geometry(request):
+    return request.param
+
+@pytest.fixture
+def model(duration, fs, geometry):
+    return Auraliser(duration, sample_frequency=fs, geometry=geometry)
+
+
+#@pytest.fixture
+#def models(duration, fs):
+
+#@pytest.fixture
+#def model_with_ground(duration, fs):
+    #return Auraliser(duration, sample_frequency=fs, geometry=Geometry.ground())
+
+#@pytest.fixture
+#def model_propagation(model):
+    #return model
+
+# Emission related
+
+@pytest.fixture(params=[500.0, 999.95, 4000.0])
 def frequency(request):
     return request.param
+
+@pytest.fixture(params=['white', 'pink'])
+def color(request):
+    return request.param
+
+
+@pytest.fixture
+def model_full():
+    pass
+
+#@pytest.fixture(params=possible_settings.items())
+#def settings(request):
+    #return request.param
+
+
+#possible_settings = {
+    #'default' : get_default_settings(),
+    #'propagation_disabled' : recursive_mapping_update(get_default_settings().update({'reflections'}),
+    #}
+
+class TestGeometry:
+
+    def test_pickle(self, geometry):
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with open('obj.pickle', mode='w+b') as f:
+                pickle.dump(geometry, f)
+
+            with open('obj.pickle', mode='r+b') as f:
+                geometry2 = pickle.load(f)
+
+            assert geometry2 == geometry
+
+
+class TestModel:
+
+    def test_remove_objects(self, model):
+
+        model.remove_objects()
+        assert len(list(model.objects)) == 0
+
+
+    def test_pickle(self, model):
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with open('obj.pickle', mode='w+b') as f:
+                pickle.dump(model, f)
+
+            with open('obj.pickle', mode='r+b') as f:
+                model2 = pickle.load(f)
+
+            assert model2 == model
+
+class TestEmission:
+    pass
+
+
+class TestGenerator:
+
+    def test_custom(self, model, fs, duration, samples):
+
+        # When using correct amount of samples
+        signal = np.random.randn(samples)
+        generator = auraliser.generator.Custom(values=signal)
+        assert (generator.output(duration, fs) == signal).all()
+
+        # When using incorrect amount of samples
+        with pytest.raises(ValueError):
+            signal = np.random.randn(samples+1)
+            generator = auraliser.generator.Custom(values=signal)
+            assert (generator.output(duration, fs) == signal).all()
+
+
+    def test_sine(self, model, fs, duration, samples, frequency):
+
+        generator = auraliser.generator.Sine(frequency)
+        assert len(generator.output(duration, fs)) == samples
+
+    def test_noise(self, model, fs, duration, samples, color):
+
+        generator = auraliser.generator.Noise(color=color)
+        assert len(generator.output(duration, fs)) == samples
+
+
+    def test_noisebands(self, model, fs, duration, samples, color):
+        pass
+
+
+#class TestPropagation:
+
+
+
+    #def test_doppler():
+        #pass
+
+    #def test_atmospheric_attenuation():
+        #pass
+
+    #def test_turbulence():
+        #pass
 
 
 def test_atmospheric_attenuation(fs, frequency):
@@ -72,9 +212,6 @@ def test_atmospheric_attenuation_n_distances():
     assert(np.all(out1==out2))
 
 
-@pytest.fixture(params=[2.0, 4.0, 8.0])
-def duration(request):
-    return request.param
 
 
 def test_atmospheric_attenuation_varying_distance(duration):
