@@ -330,6 +330,7 @@ def _generate_and_apply_fluctuations(signal, fs, frequency, spatial_separation,
                                                  scale=scale,
                                                  window=window,
                                                  state=state,
+                                                 soundspeed=soundspeed,# for vonkarman
                                                  **kwargs
                                                  )
 

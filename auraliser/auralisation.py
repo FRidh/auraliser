@@ -527,11 +527,12 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                                         include_phase=settings['turbulence']['phase'],
                                                         #seed=settings['turbulence']['random_seed'],
                                                         # Model specific below
-                                                        covariance=settings['turbulence']['covariance'],
+                                                        model=settings['turbulence']['covariance'],
                                                         include_saturation=settings['turbulence']['saturation'],
                                                         mean_mu_squared=settings['turbulence']['mean_mu_squared'],
                                                         wind_speed_variance=settings['turbulence']['variance_windspeed'],
-                                                        window=settings['turbulence']['window']
+                                                        window=settings['turbulence']['window'],
+                                                        **settings['turbulence']['vonkarman'],
                                                         )
 
 
@@ -988,6 +989,10 @@ _DEFAULT_SETTINGS = {
         'covariance'        :   'gaussian',
         'window'            :   None,
         'force_constant_distance' : False, # Force constant distance. False, or reducing function.
+        'vonkarman' : {
+            'steps'         :   10,
+            'initial'       :   0.001,
+            }
         },
     'plot':{
         'general':{

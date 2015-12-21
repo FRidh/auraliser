@@ -6,19 +6,19 @@ Using :class:`Turbulence` a time series of fluctuations can be generated and app
 
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.signal import fftconvolve
 
 from acoustics.signal import zero_crossings
-from scipy.signal import resample
+from scipy.signal import resample, fftconvolve
 
 from scipy.special import erf
 
 from auraliser._fftconvolve import fftconvolve1D
 
-from turbulence.vonkarman import covariance_wind as covariance_vonkarman_wind
+from turbulence.vonkarman import covariance_wind as _covariance_vonkarman_wind
 
+import logging
 
-def variance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared):
+def variance_gaussian(distance, wavenumber, scale, mean_mu_squared):
     """Variance of Gaussian fluctuations.
 
     :param spatial_separation: Spatial separation.
@@ -44,7 +44,7 @@ def correlation_spherical_wave(spatial_separation, scale):
     return cor
 
 
-def covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared, **kwargs):
+def covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared):
     """Calculate the covariance of a Gaussian turbulence spectrum and spherical waves.
 
     See Daigle, 1987: equation 2 and 3.
@@ -68,9 +68,8 @@ def covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu
     #covariance += (spatial_separation==0.0) * np.sqrt(np.pi)/2.0 * \
                   #mean_mu_squared * (wavenumber*wavenumber) * distance * scale
     cor = correlation_spherical_wave(spatial_separation, scale)
-    var = variance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared)
+    var = variance_gaussian(distance, wavenumber, scale, mean_mu_squared)
     covariance = cor * var
-
     return covariance
 
 
@@ -99,6 +98,7 @@ def impulse_response_fluctuations(covariance, window=None):
     """
     samples = covariance.shape[-1]
     autospectrum = np.abs(np.fft.rfft(covariance)) # Autospectrum
+    autospectrum[..., 0] = 0.0 # Remove DC component from spectrum. Causes discontin.
     del covariance
 
     # The autospectrum is real-valued. Taking the inverse DFT results in complex and symmetric values."""
@@ -156,19 +156,34 @@ def generate_gaussian_fluctuations(samples, spatial_separation, distance, wavenu
     return log_amplitude, phase
 
 
-COVARIANCES = {
-        'gaussian' : covariance_gaussian,
-        'vonkarman_wind' : covariance_vonkarman_wind,
-    }
+def covariance(covariance_func, **kwargs):
+    if covariance_func == 'gaussian':
+        return covariance_gaussian(kwargs['spatial_separation'], kwargs['distance'],
+                                   kwargs['wavenumber'], kwargs['scale'], kwargs['mean_mu_squared'])
+    elif covariance_func == 'vonkarman_wind':
+        return _covariance_vonkarman_wind(kwargs['spatial_separation'], kwargs['distance'],
+                                          kwargs['wavenumber'], kwargs['scale'], kwargs['soundspeed'],
+                                          kwargs['wind_speed_variance'], kwargs['steps'], kwargs['initial'])
+    else:
+        raise ValueError("Unknown covariance function {}".format(covariance_func))
+
+#def covariance_gaussian(**kwargs):
+    #return covariance(spatial_separation, distance, wavenumber, scale, mean_mu_squared)
+
+#def covariance_vonkarman_wind(**kwargs):
+    #return _covariance_vonkarman_wind(spatial_separation, distance, wavenumber, scale, soundspeed, wind_speed_variance, steps, initial)
+
+#COVARIANCES = {
+        #'gaussian' : covariance,
+        #'vonkarman_wind' : covariance_vonkarman_wind,
+    #}
+
 
 def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
                           scale, state=None, window=None,
-                          covariance='gaussian', **kwargs):
+                          model='gaussian', **kwargs):
 
-    try:
-        covariance_func = COVARIANCES[covariance]
-    except KeyError:
-        raise ValueError("Unknown covariance function.")
+    logging.debug("generate_fluctuations: covariance model {}".format(model))
 
     try:
         include_saturation = kwargs.pop('include_saturation')
@@ -177,7 +192,9 @@ def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
 
     # Determine the covariance
     spatial_separation = np.ones(samples) * spatial_separation
-    cov = covariance_func(spatial_separation=spatial_separation,
+    distance = np.ones(samples) * distance
+
+    cov = covariance(model, spatial_separation=spatial_separation,
                                  distance=distance,
                                  wavenumber=wavenumber,
                                  scale=scale, **kwargs)
