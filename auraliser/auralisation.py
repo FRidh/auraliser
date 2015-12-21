@@ -511,7 +511,9 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
         source_t = np.append(source_t, np.expand_dims(source_t[-1]+np.diff(source, axis=0)[-1] , axis=0), axis=0)
         spatial_separation, turbulence_distance = auraliser.propagation._spatial_separation(source, source_t, receiver)
 
-        #spatial_separation = np.cumsum(spatial_separation)
+        # Force constant distance.
+        if settings['turbulence']['force_constant_distance']:
+            turbulence_distance = settings['turbulence']['force_constant_distance'](distance)
 
         signal = auraliser.propagation.apply_turbulence(signal=signal,
                                                         fs=fs,
@@ -985,6 +987,7 @@ _DEFAULT_SETTINGS = {
         'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
         'covariance'        :   'gaussian',
         'window'            :   None,
+        'force_constant_distance' : False, # Force constant distance. False, or reducing function.
         },
     'plot':{
         'general':{
