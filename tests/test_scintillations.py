@@ -11,7 +11,7 @@ def samples(request):
 def spatial_separation(samples):
     return np.ones(samples) * 0.006
 
-@pytest.fixture(params=[10.0, 100.0, 1000.0])
+@pytest.fixture(params=[10.0, 1000.0])
 def distance(request):
     return request.param
 
@@ -39,41 +39,48 @@ def scale():
 def include_saturation(request):
     return request.param
 
-@pytest.fixture(params=[None, np.random.RandomState()])
-def state(request):
-    return request.param
+#@pytest.fixture(params=[None, np.random.RandomState()])
+#def state(request):
+    #return request.param
 
-@pytest.fixture(params=[None, np.hanning])
-def window(request, samples):
-    win = request.param
-    if win is not None:
-        return win(samples)
-    else:
-        return None
+#@pytest.fixture(params=[None, np.hanning])
+#def window(request, samples):
+    #win = request.param
+    #if win is not None:
+        #return win(samples)
+    #else:
+        #return None
+
+@pytest.fixture
+def state():
+    return np.random.RandomState()
+
+@pytest.fixture
+def window():
+    return None
+
+#def test_covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared):
+
+    #covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared)
 
 
-def test_covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared):
-
-    covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared)
-
-
-def test_impulse_response_fluctuations(samples, spatial_separation, distance, wavenumber, scale, mean_mu_squared):
-    cov = covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared)
-    assert len(impulse_response_fluctuations(cov)) == samples
+#def test_impulse_response_fluctuations(samples, spatial_separation, distance, wavenumber, scale, mean_mu_squared):
+    #cov = covariance_gaussian(spatial_separation, distance, wavenumber, scale, mean_mu_squared)
+    #assert len(impulse_response_fluctuations(cov)) == samples
 
 
-def test_generate_gaussian_fluctuations(samples, spatial_separation, distance, wavenumber,
-                                        mean_mu_squared, scale, include_saturation, state, window):
+#def test_generate_gaussian_fluctuations(samples, spatial_separation, distance, wavenumber,
+                                        #mean_mu_squared, scale, include_saturation, state, window):
 
-    logamp, phase = generate_gaussian_fluctuations(samples, spatial_separation,
-                                                   distance, wavenumber, mean_mu_squared,
-                                                   scale, include_saturation=True,
-                                                   state=state, window=None)
-    assert len(logamp)==samples
-    assert len(phase)==samples
+    #logamp, phase = generate_gaussian_fluctuations(samples, spatial_separation,
+                                                   #distance, wavenumber, mean_mu_squared,
+                                                   #scale, include_saturation=True,
+                                                   #state=state, window=None)
+    #assert len(logamp)==samples
+    #assert len(phase)==samples
 
-    logamp_variance(np.exp(logamp))
-    phase_variance(phase)
+    #logamp_variance(np.exp(logamp))
+    #phase_variance(phase)
 
 
 def test_generate_fluctuations(samples, spatial_separation, distance, wavenumber,
