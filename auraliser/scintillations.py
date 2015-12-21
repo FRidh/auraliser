@@ -213,7 +213,7 @@ def generate_fluctuations(samples, spatial_separation, distance, wavenumber,
 
     # Include log-amplitude saturation
     if include_saturation:
-        if covariance == 'gaussian':
+        if model == 'gaussian':
             mean_mu_squared = kwargs['mean_mu_squared']
             sat_distance = saturation_distance(mean_mu_squared, wavenumber, scale)
             log_amplitude *=  (np.sqrt( 1.0 / (1.0 + distance/sat_distance) ) )
