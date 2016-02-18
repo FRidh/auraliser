@@ -37,12 +37,8 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
-
 _build
 *.bak
-
 *.wav
 *.png
-
-
-
+*.ipynb

@@ -38,12 +38,17 @@ def ir_reflection(spectrum, n_blocks=None):
     spectrum = np.hstack((spectrum, spectrum[..., 0::-1]))
     return np.fft.ifftshift(np.fft.ifft(spectrum, n=n_blocks), axes=1).real
 
-def ir_atmosphere(spectrum, n_blocks=None):
-    """Real single-sided spectrum to real impulse response.
-    """
-    spectrum = np.hstack((spectrum, spectrum[..., 0::-1])) # Apparently not needed since doesn't make any difference.
-    return np.fft.ifftshift(np.fft.ifft(spectrum, n=n_blocks), axes=1).real
+#def ir_atmosphere(spectrum, n_blocks=None):
+    #"""Real single-sided spectrum to real impulse response.
+    #"""
+    #spectrum = np.hstack((spectrum, spectrum[..., 0::-1])) # Apparently not needed since doesn't make any difference.
+    #return np.fft.ifftshift(np.fft.ifft(spectrum, n=n_blocks), axes=1).real
 
+
+def impulse_response(spectrum, ntaps=None):
+    """Complex single-sided spectrum to real impulse response.
+    """
+    return np.fft.ifftshift(np.fft.irfft(spectrum, n=ntaps)).real
 
 def apply_spherical_spreading(signal, distance):
     """Apply spherical spreading to ``signal``.
@@ -58,6 +63,7 @@ def apply_spherical_spreading(signal, distance):
     :rtype: :class:`auraliser.signal.Signal`
     """
     return signal / distance # * 1.0
+
 
 def unapply_spherical_spreading(signal, distance):
     """Unapply spherical spreading.
@@ -314,69 +320,81 @@ def _spatial_separation(A, B, C):
     return spatial_separation, L
 
 
-from auraliser.scintillations import generate_fluctuations, apply_fluctuations
+#from auraliser.scintillations import generate_fluctuations, apply_fluctuations
 
-def _generate_and_apply_fluctuations(signal, fs, frequency, spatial_separation,
-                                     distance, soundspeed, scale, include_logamp, include_phase,
-                                     state=None, window=None, **kwargs):
-    """Apply fluctuations to a signal.
-    """
-    wavenumber = 2.0 * np.pi * frequency / soundspeed
-    samples = len(signal)
-    log_amplitude, phase = generate_fluctuations(samples=samples,
-                                                 spatial_separation=spatial_separation,
-                                                 distance=distance,
-                                                 wavenumber=wavenumber,
-                                                 scale=scale,
-                                                 window=window,
-                                                 state=state,
-                                                 soundspeed=soundspeed,# for vonkarman
-                                                 **kwargs
-                                                 )
+#def _generate_and_apply_fluctuations(signal, fs, frequency, spatial_separation,
+                                     #distance, soundspeed, scale, include_logamp, include_phase,
+                                     #state=None, window=None, **kwargs):
+    #"""Apply fluctuations to a signal.
+    #"""
+    #wavenumber = 2.0 * np.pi * frequency / soundspeed
+    #samples = len(signal)
+    #log_amplitude, phase = generate_fluctuations(samples=samples,
+                                                 #spatial_separation=spatial_separation,
+                                                 #distance=distance,
+                                                 #wavenumber=wavenumber,
+                                                 #scale=scale,
+                                                 #window=window,
+                                                 #state=state,
+                                                 #soundspeed=soundspeed,# for vonkarman
+                                                 #**kwargs
+                                                 #)
 
-    if not include_logamp:
-        log_amplitude = None
-    if not include_phase:
-        phase = None
-    return apply_fluctuations(signal, fs, frequency=frequency, log_amplitude=log_amplitude, phase=phase).calibrate_to(signal.leq())
+    #if not include_logamp:
+        #log_amplitude = None
+    #if not include_phase:
+        #phase = None
+    #return apply_fluctuations(signal, fs, frequency=frequency, log_amplitude=log_amplitude, phase=phase).calibrate_to(signal.leq())
 
 
-def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed,
-                     scale, include_logamp, include_phase, state=None, window=None, **kwargs):
-    """Apply turbulence to propagation.
-    """
-    # Upsample data
-    factor = 5
-    signal = Signal(signal, fs)
-    #upsampled = signal.upsample(factor)
-    from scipy.interpolate import interp1d
-    from acoustics.signal import OctaveBand
-    from acoustics.standards.iec_61672_1_2013 import NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES
-    from copy import copy
+#def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed,
+                     #scale, include_logamp, include_phase, state=None, window=None, **kwargs):
+    #"""Apply turbulence to propagation.
+    #"""
+    ## Upsample data
+    #factor = 5
+    #signal = Signal(signal, fs)
+    ##upsampled = signal.upsample(factor)
+    #from scipy.interpolate import interp1d
+    #from acoustics.signal import OctaveBand
+    #from acoustics.standards.iec_61672_1_2013 import NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES
+    #from copy import copy
 
-    #spatial_separation = interp1d(signal.times(), spatial_separation)(np.linspace(0.0, signal.times().max(), upsampled.samples))
-    #distance = interp1d(signal.times(), distance)(np.linspace(0.0, signal.times().max(), upsampled.samples))
+    ##spatial_separation = interp1d(signal.times(), spatial_separation)(np.linspace(0.0, signal.times().max(), upsampled.samples))
+    ##distance = interp1d(signal.times(), distance)(np.linspace(0.0, signal.times().max(), upsampled.samples))
 
-    frequencies = OctaveBand(fstart=NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES[0], fstop=signal.fs/2.0, fraction=fraction)
+    ##frequencies = OctaveBand(fstart=NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES[0], fstop=signal.fs/20.0, fraction=fraction)
 
-    #signal = upsampled
-    frequencies, signals = signal.bandpass_frequencies(frequencies, order=order, purge=True, zero_phase=True)
-    samples = len(signal)
-    del signal
+    ##signal = upsampled
+    ##frequencies, signals = signal.bandpass_frequencies(frequencies, order=order, purge=True, zero_phase=True)
+    #samples = len(signal)
+    ##del signal
 
-    state = state if state else np.random.RandomState()
+    #state = state if state else np.random.RandomState()
 
-    modulated = map(lambda frequency, signal: _generate_and_apply_fluctuations(signal, fs, frequency,
-                                                                               spatial_separation=spatial_separation,
-                                                                               distance=distance,
-                                                                               soundspeed=soundspeed,
-                                                                               include_logamp=include_logamp,
-                                                                               include_phase=include_phase,
-                                                                               scale=scale,
-                                                                               window=None,
-                                                                               state=copy(state),
-                                                                               **kwargs), frequencies.center, signals)
-    return Signal(sum(modulated), fs)#.decimate(factor, zero_phase=True)
+    ##modulated = map(lambda frequency, signal: _generate_and_apply_fluctuations(signal, fs, frequency,
+                                                                               ##spatial_separation=spatial_separation,
+                                                                               ##distance=distance,
+                                                                               ##soundspeed=soundspeed,
+                                                                               ##include_logamp=include_logamp,
+                                                                               ##include_phase=include_phase,
+                                                                               ##scale=scale,
+                                                                               ##window=None,
+                                                                               ##state=copy(state),
+                                                                               ##**kwargs), frequencies.center, signals)
+    ##return Signal(sum(modulated), fs)#.decimate(factor, zero_phase=True)
+
+    #modulated = _generate_and_apply_fluctuations(signal, fs, 1000.0,
+                                                #spatial_separation=spatial_separation,
+                                                #distance=distance,
+                                                #soundspeed=soundspeed,
+                                                #include_logamp=include_logamp,
+                                                #include_phase=include_phase,
+                                                #scale=scale,
+                                                #window=None,
+                                                #state=copy(state),
+                                                #**kwargs)
+    #return Signal(modulated, fs)#.decimate(factor, zero_phase=True)
 
 
 
@@ -398,57 +416,57 @@ def _ir_attenuation_coefficient(atmosphere, distances, fs=44100.0, n_blocks=2048
     return ir_atmosphere(tf, n_blocks=n_blocks)
 
 
-def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, n_blocks, n_distances=None):
-    """Apply or unapply atmospheric absorption depending on sign.
+#def _atmospheric_absorption(signal, fs, atmosphere, distance, sign, n_blocks, n_distances=None):
+    #"""Apply or unapply atmospheric absorption depending on sign.
 
-    :param signal: Signal
-    :param fs: Sample frequency
-    :param atmosphere: Atmosphere
-    :param distance: Distance
-    :param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
-    :param n_distances: Amount of unique distances to consider.
+    #:param signal: Signal
+    #:param fs: Sample frequency
+    #:param atmosphere: Atmosphere
+    #:param distance: Distance
+    #:param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
+    #:param n_distances: Amount of unique distances to consider.
 
-    """
-    if n_distances is not None:
-        distances = np.linspace(distance.min(), distance.max(), n_distances, endpoint=True)   # Distances to check
+    #"""
+    #if n_distances is not None:
+        #distances = np.linspace(distance.min(), distance.max(), n_distances, endpoint=True)   # Distances to check
 
-        # Every row is an impulse response.
-        ir_i = _ir_attenuation_coefficient(atmosphere, distances=distances, n_blocks=n_blocks, fs=fs, sign=sign)#[start:stop+1, :]
+        ## Every row is an impulse response.
+        #ir_i = _ir_attenuation_coefficient(atmosphere, distances=distances, n_blocks=n_blocks, fs=fs, sign=sign)#[start:stop+1, :]
 
-        # Get the IR of the distance closest by
-        indices = np.argmin(np.abs(distance[:,None] - distances), axis=1)
-        ir = ir_i[indices, :]
-    else:
-        ir = _ir_attenuation_coefficient(atmosphere, distances=distance, n_blocks=n_blocks, fs=fs, sign=sign)
-    return convolve(signal, ir.T)
-
-
-def apply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=128, n_distances=None):
-    """
-    Apply atmospheric absorption to ``signal``.
-
-    :param signal: Signal
-    :param fs: Sample frequency
-    :param atmosphere: Atmosphere
-    :param distance: Distance
-    :param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
-    :param n_distances: Amount of unique distances to consider.
-    """
-    return _atmospheric_absorption(signal, fs, atmosphere, distance, -1, n_blocks, n_distances)
+        ## Get the IR of the distance closest by
+        #indices = np.argmin(np.abs(distance[:,None] - distances), axis=1)
+        #ir = ir_i[indices, :]
+    #else:
+        #ir = _ir_attenuation_coefficient(atmosphere, distances=distance, n_blocks=n_blocks, fs=fs, sign=sign)
+    #return convolve(signal, ir.T)
 
 
-def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=128, n_distances=None):
-    """
-    Unapply atmospheric absorption to `signal`.
+#def apply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=128, n_distances=None):
+    #"""
+    #Apply atmospheric absorption to ``signal``.
 
-    :param signal: Signal
-    :param fs: Sample frequency
-    :param atmosphere: Atmosphere
-    :param distance: Distance
-    :param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
-    :param n_distances: Amount of unique distances to consider.
-    """
-    return _atmospheric_absorption(signal, fs, atmosphere, distance, +1, n_blocks, n_distances)
+    #:param signal: Signal
+    #:param fs: Sample frequency
+    #:param atmosphere: Atmosphere
+    #:param distance: Distance
+    #:param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
+    #:param n_distances: Amount of unique distances to consider.
+    #"""
+    #return _atmospheric_absorption(signal, fs, atmosphere, distance, -1, n_blocks, n_distances)
+
+
+#def unapply_atmospheric_absorption(signal, fs, atmosphere, distance, n_blocks=128, n_distances=None):
+    #"""
+    #Unapply atmospheric absorption to `signal`.
+
+    #:param signal: Signal
+    #:param fs: Sample frequency
+    #:param atmosphere: Atmosphere
+    #:param distance: Distance
+    #:param n_blocks: Amount of filter taps to keep. Blocks to use for performing the FFT. Determines frequency resolution.
+    #:param n_distances: Amount of unique distances to consider.
+    #"""
+    #return _atmospheric_absorption(signal, fs, atmosphere, distance, +1, n_blocks, n_distances)
 
 
 @numba.jit(nogil=True)

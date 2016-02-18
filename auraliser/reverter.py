@@ -47,7 +47,8 @@ class Reverter(object):
             logging.info("revert: Unapply spherical spreading.")
             signal = unapply_spherical_spreading(signal, distance)
         
-        if self.settings['atmospheric_absorption']['include']:
+        # Atmospheric attenuation when discarding the reflected path
+        if not self.settings['reflections']['include'] and self.settings['atmospheric_absorption']['include']:
             logging.info("revert: Unapply atmospheric absorption.")
             signal = unapply_atmospheric_absorption(signal,
                                                     fs,
@@ -57,6 +58,11 @@ class Reverter(object):
                                                     n_distances=self.settings['atmospheric_absorption']['unique_distances']
                                                     )[0:samples]
         
+        # Correction for atmospheric attenuation and reflected path
+        if self.settings['reflections']['include'] and self.settings['atmospheric_absorption']['include']:
+            pass
+
+
         if self.settings['doppler']['include'] and self.settings['doppler']['frequency']:
             logging.info("revert: Unapply Doppler frequency shift.")
             delay = distance / self.atmosphere.soundspeed

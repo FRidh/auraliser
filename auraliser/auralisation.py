@@ -14,20 +14,20 @@ The `class:`Auralisar` supports several propagation effects:
 -  **modulations and decorrelation** due to fluctuations caused by atmospheric turbulence
 
 """
-
-import weakref
-import numpy as np
-import logging
 import abc
-from collections import namedtuple
-import itertools
-from multiprocessing import Pool
-
-from geometry import Point, Vector
+import acoustics
+import auraliser
+import collections
+import cytoolz
+import geometry
 import ism
+import itertools
+import logging
+import math
+import numpy as np
+import weakref
 
-from acoustics.atmosphere import Atmosphere
-from acoustics.directivity import Omni
+from numtraits import NumericalTrait
 from acoustics import Signal
 from acoustics.signal import convolve
 
@@ -36,14 +36,92 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-# Local
-#from ._signal import Signal
-import auraliser
-import auraliser.propagation
-from .generator import Noise
 from .tools import norm, unit_vector
 
 import collections
+
+from multipledispatch import dispatch
+
+from streaming.stream import Stream, BlockStream, repeat_item
+import streaming
+
+@dispatch(object, object)
+def unequality(a, b):
+    if a is None and b is None:
+        return False
+    elif a is None or b is None:
+        return True
+
+    elif a.__class__ != b.__class__:
+        return True
+    else:
+        return unequality(a.__dict__, b.__dict__)
+
+#@dispatch(object, None)
+#def unequality(a, b):
+    #return True
+
+#@dispatch(None, None)
+#def unequality(a, b):
+    #return False
+
+@dispatch(int, int)
+def unequality(a, b):
+    return a!=b
+
+@dispatch(float, float)
+def unequality(a, b):
+    return a!=b
+
+@dispatch(str, str)
+def unequality(a, b):
+    return a!=b
+
+@dispatch(object, np.ndarray)
+def unequality(a, b):
+    return True
+
+@dispatch(np.ndarray, np.ndarray)
+def unequality(a, b):
+    return not np.allclose(a, b) # We use all(), not any()
+
+@dispatch(dict, dict)
+def unequality(a, b):
+    try:
+        return a!=b
+    except ValueError:
+        if set(a.keys()) != set(b.keys()):
+            return True
+        else:
+            for key, value in a.items():
+                if unequality(b[key], value):
+                    return True
+            else:
+                return False
+
+def equality(a, b):
+    return not unequality(a, b)
+
+
+#def _equalityity_with_arrays(a, b):
+    #"""Test equalityity between two objects.
+    #"""
+    #if self.__class__ == other.__class__:
+        #for key, value in self.__dict__:
+            #if key not in other:
+                #return False
+            #equality = other[key] != value
+            ##try:
+            #unequality = not equality
+            #print(equality)
+            ##except ValueError:
+                ##print(equality)
+                ##unequality = not np.all(equality)
+            #if unequality:
+                #return False
+        #else:
+            #return True
+    #return False
 
 def recursive_mapping_update(d, u):
     """Recursively update a mapping/dict.
@@ -65,7 +143,8 @@ def position_for_directivity(mirror):
     """
     Get the position to be used for the directivity.
 
-    Directivity is given by vector from the first order to the original source after. However, this directivity is mirrored to
+    Directivity is given by vector from the first order to the original source after.
+    However, this directivity is mirrored to
 
     """
     m = mirror
@@ -74,7 +153,7 @@ def position_for_directivity(mirror):
     return m.position
 
 #class PositionDescriptor(object):
-    #"""Descriptor that enforces lists of Points.
+    #"""Descriptor that enforces lists of geometry.Points.
     #"""
 
     #def __init__(self):
@@ -112,7 +191,10 @@ class PositionDescriptor(object):
 
     def __set__(self, instance, value):
 
-        if isinstance(value, Point) or isinstance(value, Vector):
+        if value is None:
+            value = self.default
+
+        if isinstance(value, geometry.Point):# or isinstance(value, geometry.Vector):
             instance.__dict__[self.attr] = np.array(value)[None,:]
         elif isinstance(value, tuple):
             if len(value)==3:
@@ -126,7 +208,8 @@ class PositionDescriptor(object):
                 raise ValueError("Array should have three columns.")
             else:
                 instance.__dict__[self.attr] = np.asarray(value)
-
+        else:
+            raise ValueError("Cannot set value, invalid type '{}'.".format(type(value)))
 
 class Auraliser(object):
     """
@@ -140,7 +223,7 @@ class Auraliser(object):
         """
         return obj
 
-    def __init__(self, duration, sample_frequency=44100.0, atmosphere=None, geometry=None, settings=None):
+    def __init__(self, duration, atmosphere=None, geometry=None, settings=None):
         """
         Constructor.
 
@@ -158,7 +241,7 @@ class Auraliser(object):
         if settings:
             recursive_mapping_update(self.settings, settings)
 
-        self.atmosphere = atmosphere if atmosphere else Atmosphere()
+        self.atmosphere = atmosphere if atmosphere else acoustics.atmosphere.Atmosphere()
         """
         Atmosphere described by :class:`Auraliser.Atmosphere.Atmosphere`.
         """
@@ -168,9 +251,9 @@ class Auraliser(object):
         Duration of auralisation.
         """
 
-        self.sample_frequency = sample_frequency
-        """Sample frequency.
-        """
+        #self.sample_frequency = sample_frequency
+        #"""Sample frequency.
+        #"""
 
         self.geometry = geometry if geometry else Geometry()
         """
@@ -178,11 +261,15 @@ class Auraliser(object):
         """
 
     def __eq__(self, other):
-        return self.__dict__ == other.__dict__ and self.__class__ == other.__class__
-
+        return equality(self, other)
+        #return (self.__dict__ == other.__dict__) and (self.__class__ == other.__class__)
 
     def __del__(self):
         del self._objects[:]
+
+    @property
+    def sample_frequency(self):
+        return self.settings['fs']
 
     def _get_real_object(self, name):
         """Get real object by name.
@@ -196,7 +283,7 @@ class Auraliser(object):
             if name == obj.name:
                 return obj
         else:
-            raise ValueError("Cannot get object. Unknown name {}. ".format(name))
+            raise ValueError("Cannot retrieve object. Unknown name {}. ".format(name))
 
     def get_object(self, name):
         """Get object by name.
@@ -213,15 +300,17 @@ class Auraliser(object):
         name = name if isinstance(name, str) else name.name
         for obj in self._objects:
             if name == obj.name:
+                logging.debug('Removing object with name "{}"'.format(name))
                 self._objects.remove(obj)
 
     def remove_objects(self):
         """Delete all objects from model."""
-        for obj in self._objects:
-            self._objects.remove(obj)
+        logging.debug('Removing all objects from model.')
+        del self._objects[:]
 
     def _add_object(self, name, model, *args, **kwargs):
         """Add object to model."""
+        logging.debug('Adding object with name "{}" to model.'.format(name))
         obj = model(weakref.proxy(self), name, *args, **kwargs)   # Add hidden hard reference
         self._objects.append(obj)
         return self.get_object(obj.name)
@@ -239,6 +328,14 @@ class Auraliser(object):
         """
         return self._add_object(name, Receiver, position=position)#*args, **kwargs)
 
+    def update_settings(self, settings):
+        """Recursively update :attr:`settings` with `settings` using :func:`recursive_mapping_update`.
+
+        :param settings: New settings to use.
+
+        .. note:: If you want to assign a dictionary with new settings, replacing all old settings, you should just reassign :meth:`settings`.
+        """
+        self.settings = recursive_mapping_update(self.settings, settings)
 
     @property
     def time(self):
@@ -300,67 +397,81 @@ class Auraliser(object):
 
         return True
 
-    def _get_mirror_sources_from_ism(self, source, receiver):
-        """Determine the mirror sources for the given source and receiver.
+    #def _get_mirror_sources_from_ism(self, source, receiver):
+        #"""Determine the mirror sources for the given source and receiver.
 
-        :param source: Source position
-        :param receiver: Receiver position
+        #:param source: Source position
+        #:param receiver: Receiver position
 
-        Use the image source method to determine the mirror sources.
-        Return only the amount of mirrors as specified in the settings.
+        #Use the image source method to determine the mirror sources.
+        #Return only the amount of mirrors as specified in the settings.
 
-        .. note:: Mirror receivers are calculated instead of mirror sources.
-        """
-        logging.info("_get_mirror_sources_from_ism: Determining mirrors sources.")
-        model = ism.Model(self.geometry.walls, source=receiver, receiver=source, max_order=self.settings['reflections']['order_threshold'])
-        mirrors = model.determine(strongest=self.settings['reflections']['mirrors_threshold'])
-        yield from mirrors
-
+        #.. note:: Mirror receivers are calculated instead of mirror sources.
+        #"""
+        #logging.info("_get_mirror_sources_from_ism: Determining mirrors sources.")
+        #model = ism.Model(self.geometry.walls, source=receiver, receiver=source, max_order=self.settings['reflections']['order_threshold'])
+        #mirrors = model.determine(strongest=self.settings['reflections']['mirrors_threshold'])
+        #yield from mirrors
 
     def _auralise_subsource(self, subsource, receiver):
         """Synthesize the signal of a subsource.
+
+        We check whether reflections are included or not.
         """
 
         # Generate the emission signals.
         logging.info("_auralise_subsource: Generating subsource emission signals.")
         subsource.generate_signals()
 
+        nblock = self.settings['nblock']
+
+        # Make sure the positions are streams
+        subsource_position = Stream(iter(subsource.position)).blocks(nblock)
+        receiver_position = Stream(iter(receiver.position)).blocks(nblock)
+
         # Determine mirrors
         logging.info("_auralise_subsource: Determine mirrors.")
         if self.settings['reflections']['include'] and len(self.geometry.walls) > 0: # Are reflections possible?
             logging.info("_auralise_subsource: Searching for mirrors. Reflections are enabled, and we have walls.")
-            resolution = self.settings['reflections']['update_resolution']
-            subsource_position = [Point(*src) for src in subsource.position[::resolution]]# subsource.position[::n]
-            receiver_position = [Point(*receiver.position[0])]
+            #resolution = self.settings['reflections']['update_resolution']
 
-            ## Mirror receivers
-            #mirrors1, mirrors2 = itertools.tee( self._get_mirror_sources_from_ism(subsource_position, receiver_position) )
-            #del subsource_position, receiver_position
+            mirrors = _ism_mirrors(subsource_position, receiver_position, subsource.signal, self.geometry.walls, self.settings)
 
-            #emissions = (_apply_source_effects(mirror, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere) for mirror in mirrors1)
+            ##### Obtain mirror sources from image source method
+            ##### FIXME: convert to Streams
+            ####_subsource_position = [geometry.Point(*src) for src in subsource.position[::resolution]]# subsource.position[::n]
+            ####_receiver_position = [geometry.Point(*receiver.position[0])]
+            ####ism_mirrors = self._get_mirror_sources_from_ism(_subsource_position, _receiver_position)
 
-            ## pre-zip mirrors for propagation effects calculation
-            #mirrors = (_Mirror(subsource.position, np.array(mirror.position), emission, self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror, emission in zip(mirrors2, emissions))
-            #del emissions
 
-            mirrors = self._get_mirror_sources_from_ism(subsource_position, receiver_position)
-            mirrors = (_Mirror(subsource.position, np.array(mirror.position), _apply_source_effects(mirror, subsource, self.settings, self.samples, self.sample_frequency, self.atmosphere), self.settings, self.samples, self.sample_frequency, self.atmosphere ) for mirror in mirrors)
+            #####mirrors, _mirrors = mirrors.tee()
+
+            ##### Retrieve emission signal for mirror orientation
+            ####emissions = (subsource.signal(unit_vector(receiver-source)) for source, receiver in zip(subsource_position, receiver_position))
+
+            ##### Apply mirror source strength
+            ####emissions = (_apply_mirror_source_strength())
+
+            #####apply_source_effects = lambda x: _apply_source_effects(x, subsource, self.settings, self.samples)
+            #####emissions = _mirrors.map(apply_source_effects )
+
+            ##### Final sources
+            ####mirrors = (Mirror(Stream(subsource.position), constant(mirror.position), emission) for mirror, emission in zip(mirrors, emissions))
 
         else: # No walls, so no reflections. Therefore the only source is the real source.
             logging.info("_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
-            emission = subsource.signal( unit_vector(receiver.position - subsource.position))
-            mirrors = [ _Mirror(np.array(subsource.position), receiver.position, emission, self.settings, self.samples, self.sample_frequency, self.atmosphere) ]
-            del emission
+            #emission = subsource.signal( unit_vector(receiver.position - subsource.position)) # Use non-Stream here for now...
+            emission = subsource.signal(unit_vector_stream(receiver_position - subsource_position))
+            # Final sources
+            mirrors = [ Mirror(subsource_position, receiver_position, emission) ]
 
-        mirrors1, mirrors2 = itertools.tee(mirrors)
-        # Apply propagation effects.
-        signals = itertools.starmap(_apply_propagation_effects, mirrors1)
-        signals = (Signal(signal, self.sample_frequency) for signal in signals) # Convert to signal classes
-
-        # Determine orientations for receiver encoding
-        orientations = ( unit_vector(mirror.source_position - mirror.receiver_position) for mirror in mirrors2)
-
-        yield from zip(signals, orientations)
+        # Yield contribution of each mirror source.
+        for mirror in mirrors:
+            #print(mirror.receiver_position.peek())
+            signal = _apply_propagation_effects(mirror.source_position, mirror.receiver_position, mirror.emission, self.settings, self.samples, self.sample_frequency, self.atmosphere)
+            # Orientation is the unit vector from source to receiver
+            orientation = unit_vector_stream(mirror.source_position - mirror.receiver_position)
+            yield signal, orientation
 
 
     def _auralise_source(self, source, receiver):
@@ -401,74 +512,144 @@ class Auraliser(object):
         return plot_model(self, **kwargs)
 
 
-def _apply_source_effects(mirror, subsource, settings, samples, fs, atmosphere):
-    """Apply source effects to source.
-
-    Includes:
-        - Directivity of source
-        - Effectiveness and strength of mirror
-
+def unit_vector_stream(stream):
+    """Calculate unit vector for each element in stream.
+    :type stream: BlockStream
     """
-    logging.info("_apply_source_effects: Applying source effects...")
+    return stream.map(lambda x: x / np.linalg.norm(x, axis=-1)[...,None])
 
-    resolution = settings['reflections']['update_resolution']
 
-    # Emission signal with directivity.
-    orientation = unit_vector(np.array(position_for_directivity(mirror)) - subsource.position) # Orientation from receiver to source.
-    signal = subsource.signal( orientation ) # Signal for given orientation.
-    del orientation
-
-    if mirror.effective is not None:
-        signal *= np.repeat(mirror.effective, resolution, axis=0)[0:samples]
-        del mirror.effective
-
-    # Apply correct source strength due to reflections.
-    if not settings['reflections']['force_hard'] and not np.all(mirror.strength == 1.0): # Save computations, for direct source there is no need.
-
-        logging.info("_apply_source_effects: Soft ground.")
-        signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_reflection(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
-
-        # We cannot yet delete the strength of the object since a child mirror source might need it.
-        # Same for the position, as the child needs to know it for the directivity.
-        # But, we can at least delete the strength of this mother source. (also not true?!)
-        #del mirror.strength
-        #del mirror.mother.strength, mirror.mother.effective, mirror.mother.distance
-        #print(signal)
-    else:
+def _apply_mirror_source_strength(emission, effective, strength, force_hard):
+    """Apply mirror source strength"""
+    if effective is not None:
+        emission = emission * effective
+    #if force_hard or np.all(strength == 1.0):
+    if force_hard:
         logging.info("_apply_source_effects: Hard ground.")
-    del mirror
-    return signal
+    else:
+        # Apply mirror source strength. Only necessary when we have a soft surface.
+        logging.info("_apply_source_effects: Soft ground.")
+        #impulse_responses = map(auraliser.propagation.impulse_response, strength)
+        impulse_responses = strength.map(auraliser.propagation.impulse_response)
+        emission = convolve(emission, impulse_responses, nblock)
+
+    return emission
 
 
-##def _apply_receiver_effects(source_position, receiver, signal, settings):
-    ##"""Apply receiver effects to receiver.
+def _ism_get_mirror_sources(source, receiver, walls, order_threshold, mirrors_threshold):
+    """Determine the mirror sources for the given source and receiver.
 
-    ##:param source: Source
-    ##:param receiver: Receiver
-    ##:param signal: Signal
-    ##:returns: Multi-channel signal adjusted for receiver effects.
+    :param source: Source position
+    :param receiver: Receiver position
 
-    ##Includes:
-        ##- Directivity of receiver.
+    Use the image source method to determine the mirror sources.
+    Return only the amount of mirrors as specified in the settings.
 
-    ##"""
+    .. note:: Mirror receivers are calculated instead of mirror sources.
+    """
+    logging.info("_ism_get_mirror_sources: Determining mirror sources.")
+    model = ism.Model(walls=walls, source=source, receiver=receiver, max_order=order_threshold)
+    mirrors = model.determine(strongest=mirrors_threshold)
+    yield from mirrors
 
-    ### Orientation from source to receiver.
-    ##orientation = unit_vector(source_position - receiver.position)
+def _ism_mirrors(subsource_position, receiver_position, emission, walls, settings):
+    """Determine mirror sources and their emissions.
 
-    ##return signal, orientation
+    :param subsource_position: Position of the subsource.
+    :param receiver_position: Position of the subsource.
+    :param emission: Emission generator.
+    :param settings: Settings.
+    :returns: Yields mirror sources with emission signals.
+    """
+    logging.info("_ism_mirrors: Determining mirror sources and their emissions.")
+    resolution = settings['reflections']['update_resolution']
+    nblock = settings['nblock']
+    subsource_position = subsource_position.blocks(resolution)
+    receiver_position = receiver_position.blocks(resolution)
 
-    #### Multichannel receiver
-    ###signals = np.tile(signal, (len(receiver.channels), 1))
+    # Obtain mirrors from Image Source Method.
+    # Determine mirror sources every `n` samples. We pick the first sample of each block.
+    _subsource_position = list(subsource_position.copy().map(lambda x: geometry.Point(*x[0])))
+    _receiver_position = [ geometry.Point(*receiver_position.copy().samples().peek()) ]
+    #_subsource_position = [geometry.Point(*src) for src in subsource_position[::resolution]]# subsource.position[::n]
+    #_receiver_position = [geometry.Point(*receiver_position[0])]
+    mirrors = _ism_get_mirror_sources(source=_receiver_position,
+                                      receiver=_subsource_position,
+                                      walls=walls,
+                                      order_threshold=settings['reflections']['order_threshold'],
+                                      mirrors_threshold=settings['reflections']['mirrors_threshold'])
 
-    ###resolution = settings['directivity']['update_resolution']
+    for mirror in mirrors:
+        # To determine the directivity correction we need to know the orientation from mirror receiver to source.
+        # What matters however is not the position of the mirror, but the position of the first order mirror.
+        # Since we consider a non-moving receiver, the position is a constant. See also above, _receiver_position.
+        receiver_position_directivity = position_for_directivity(mirror)
+        # Emission given a vector pointing from receiver to source.
+        orientation_directivity = unit_vector_stream(receiver_position_directivity - subsource_position.copy())
+        signal = emission(orientation_directivity).blocks(resolution)
 
-    #### Apply directivity correction to channel
-    ###for i, channel in enumerate(receiver.channels):
-        #### Sample directivity only every `resolution` samples.
-        ###d = np.repeat(channel.directivity.using_cartesian(*orientation[::resolution].T), resolution)[0:len(signal)]
-        ###signals[i,:] *= d
-    ###return signals
+        # Apply correct directivity.
+        #effective = BlockStream(mirror.effective, resolution)
+        #strength = BlockStream(mirror.strength, resolution)
+        effective = repeat_item(Stream(mirror.effective), resolution).blocks(resolution)
+        strength = repeat_item(Stream(mirror.strength), resolution).blocks(resolution)
+        signal = _apply_mirror_source_strength(signal, effective, strength, settings['reflections']['force_hard'])
+
+        mirror_receiver_position = constant(mirror.position)
+        yield Mirror(subsource_position.blocks(nblock), mirror_receiver_position.blocks(nblock), signal.blocks(nblock))
+
+
+
+#def _apply_source_effects(mirror, subsource, settings, samples):
+    #"""Apply source effects to source.
+
+    #Includes:
+        #- Directivity of source
+        #- Effectiveness and strength of mirror
+
+    #"""
+    #logging.info("_apply_source_effects: Applying source effects...")
+
+    #resolution = settings['reflections']['update_resolution']
+    #nblock = settings['reflections']['update_resolution']
+    #ntaps = settings['reflections']['taps']
+
+    ## Emission signal with directivity.
+    #orientation = unit_vector(np.array(position_for_directivity(mirror)) - subsource.position) # Orientation from receiver to source.
+    #signal = subsource.signal( orientation ) # Signal for given orientation.
+
+    #del orientation
+
+    #if mirror.effective is not None:
+        ##signal = map(operator.mul, signal, iter(mirror.effective))
+        #signal *= np.repeat(mirror.effective, resolution, axis=0)[0:samples]
+        #del mirror.effective
+
+    ## Apply correct source strength due to reflections.
+    #if not settings['reflections']['force_hard'] and not np.all(mirror.strength == 1.0): # Save computations, for direct source there is no need.
+
+        #logging.info("_apply_source_effects: Soft ground.")
+
+        ## Convert single-sided source spectrum to impulse response
+        ##ir = map(lambda x: auraliser.impulse_response(x, ntaps=ntaps), iter(mirror.strength))
+        ## And convolve
+        ##signal = Signal.fromiter(convolve(signal=signal, nblock=nblock, ir=ir), fs)
+
+        #signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_reflection(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
+
+        ## We cannot yet delete the strength of the object since a child mirror source might need it.
+        ## Same for the position, as the child needs to know it for the directivity.
+        ## But, we can at least delete the strength of this mother source. (also not true?!)
+        ##del mirror.strength
+        ##del mirror.mother.strength, mirror.mother.effective, mirror.mother.distance
+        ##print(signal)
+    #else:
+        #logging.info("_apply_source_effects: Hard ground.")
+    #del mirror
+    #return signal
+
+
+from streaming.signal import constant
 
 def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, atmosphere):
     """Apply the propagation filters for this specific source-mirror-receiver combination.
@@ -490,76 +671,136 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     """
     logging.info("_apply_propagation_effects: Auralising mirror")
 
-    distance = norm(source - receiver)
+    nblock = settings['nblock']
+
+    source = source.blocks(nblock)
+    receiver = receiver.blocks(nblock)
+
+    # Source - receiver distance
+    distance = (source.copy() - receiver.copy()).map(lambda x: np.linalg.norm(x, axis=-1))
+    #print("Distance: {}".format(distance))
+    #print("Source:{}".format(source.peek()))
+    #print("Receiver: {}".format(receiver.peek()))
+
 
     # Apply delay due to spreading (Doppler shift)
     if settings['doppler']['include'] and settings['doppler']['frequency']:
         logging.info("_apply_propagation_effects: Applying Doppler frequency shift.")
-        signal = auraliser.propagation.apply_doppler(signal,
-                                                     distance/atmosphere.soundspeed,
-                                                     fs,
-                                                     method=settings['doppler']['interpolation'],
-                                                     kernelsize=settings['doppler']['kernelsize'],
-                                                     )
+        #signal = auraliser.propagation.apply_doppler(signal,
+                                                     #distance/atmosphere.soundspeed,
+                                                     #fs,
+                                                     #method=settings['doppler']['interpolation'],
+                                                     #kernelsize=settings['doppler']['kernelsize'],
+                                                     #)
+        signal = auraliser.realtime.apply_doppler(signal=signal,
+                                                  delay=distance.copy()/atmosphere.soundspeed,
+                                                  fs=fs)
 
-    # Apply atmospheric turbulence.
     if settings['turbulence']['include']:
         logging.info("_apply_propagation_effects: Applying turbulence.")
 
-        # Determine spatial seperation and source-receiver distance
-        source_t = source[1:,:]
-        source_t = np.append(source_t, np.expand_dims(source_t[-1]+np.diff(source, axis=0)[-1] , axis=0), axis=0)
-        spatial_separation, turbulence_distance = auraliser.propagation._spatial_separation(source, source_t, receiver)
+        speed = 100.
+        correlation_time = settings['turbulence']['correlation_length'] / speed
+        fs_low = 5./correlation_time
+        from streaming.signal import diff
+        velocity = diff(source.copy())*fs
+        speed = velocity.blocks(nblock).map(lambda x: np.linalg.norm(x, axis=-1))
 
-        # Force constant distance.
-        if settings['turbulence']['force_constant_distance']:
-            turbulence_distance = settings['turbulence']['force_constant_distance'](distance)
+        from acoustics.signal import OctaveBand
+        from acoustics.standards.iec_61672_1_2013 import NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES
+        frequencies = OctaveBand(fstart=NOMINAL_THIRD_OCTAVE_CENTER_FREQUENCIES[0], fstop=fs/2.0, fraction=settings['turbulence']['fraction'])
+        signal = auraliser.realtime.turbulence_fluctuations_spectral(signal=signal,
+                                                            frequencies=frequencies,
+                                                            nblock=nblock,
+                                                            fs=fs,
+                                                            fs_low=fs_low,
+                                                            ntaps=settings['turbulence']['ntaps'],
+                                                            ntaps_octaves=settings['turbulence']['ntaps_octaves'],
+                                                            speed=speed,
+                                                            correlation_length=settings['turbulence']['correlation_length'],
+                                                            window=settings['turbulence']['window'],
+                                                            state=settings['turbulence']['state'],
+                                                            distance=distance.copy(),
+                                                            soundspeed=atmosphere.soundspeed,
+                                                            mean_mu_squared=settings['turbulence']['mean_mu_squared'],
+                                                            include_logamp=settings['turbulence']['amplitude'],
+                                                            include_phase=settings['turbulence']['phase'],
+                                                            include_saturation=settings['turbulence']['saturation'],
+                                                            )
 
-        signal = auraliser.propagation.apply_turbulence(signal=signal,
-                                                        fs=fs,
-                                                        fraction=settings['turbulence']['fraction'],
-                                                        order=settings['turbulence']['order'],
-                                                        spatial_separation=spatial_separation,
-                                                        distance=turbulence_distance,
-                                                        soundspeed=atmosphere.soundspeed,
-                                                        scale=settings['turbulence']['correlation_length'],
-                                                        include_logamp=settings['turbulence']['amplitude'],
-                                                        include_phase=settings['turbulence']['phase'],
-                                                        #seed=settings['turbulence']['random_seed'],
-                                                        # Model specific below
-                                                        model=settings['turbulence']['covariance'],
-                                                        include_saturation=settings['turbulence']['saturation'],
-                                                        mean_mu_squared=settings['turbulence']['mean_mu_squared'],
-                                                        wind_speed_variance=settings['turbulence']['variance_windspeed'],
-                                                        window=settings['turbulence']['window'],
-                                                        **settings['turbulence']['vonkarman'],
-                                                        )
+        #print(signal.nsamples())
+    ## Apply atmospheric turbulence.
+    #if settings['turbulence']['include']:
+        #logging.info("_apply_propagation_effects: Applying turbulence.")
 
+        ## Determine spatial seperation and source-receiver distance
+        #source_t = source[1:,:]
+        #source_t = np.append(source_t, np.expand_dims(source_t[-1]+np.diff(source, axis=0)[-1] , axis=0), axis=0)
+        ##spatial_separation, turbulence_distance = auraliser.propagation._spatial_separation(source, source_t, receiver)
+        #spatial_separation = np.arange(samples)/fs
+        #turbulence_distance = distance
+
+
+        ## Force constant distance.
+        #if settings['turbulence']['force_constant_distance']:
+            #turbulence_distance = settings['turbulence']['force_constant_distance'](distance)
+
+        #signal = auraliser.realtime.apply_turbulence(signal=signal,
+                                                        #fs=fs,
+                                                        #fraction=settings['turbulence']['fraction'],
+                                                        #order=settings['turbulence']['order'],
+                                                        #spatial_separation=spatial_separation,
+                                                        #distance=turbulence_distance,
+                                                        #soundspeed=atmosphere.soundspeed,
+                                                        #scale=settings['turbulence']['correlation_length']/np.linalg.norm(source-receiver, axis=1),
+                                                        #include_logamp=settings['turbulence']['amplitude'],
+                                                        #include_phase=settings['turbulence']['phase'],
+                                                        ##seed=settings['turbulence']['random_seed'],
+                                                        ## Model specific below
+                                                        #model=settings['turbulence']['covariance'],
+                                                        #include_saturation=settings['turbulence']['saturation'],
+                                                        #mean_mu_squared=settings['turbulence']['mean_mu_squared'],
+                                                        #wind_speed_variance=settings['turbulence']['variance_windspeed'],
+                                                        #window=settings['turbulence']['window'],
+                                                        #**settings['turbulence']['vonkarman'],
+                                                        #)
+
+    #signal = iter(signal)
 
     # Apply atmospheric absorption.
     if settings['atmospheric_absorption']['include']:
         logging.info("_apply_propagation_effects: Applying atmospheric absorption.")
-        signal = auraliser.propagation.apply_atmospheric_absorption(signal,
-                                              fs,
-                                              atmosphere,
-                                              distance,
-                                              n_blocks=settings['atmospheric_absorption']['taps'],
-                                              n_distances=settings['atmospheric_absorption']['unique_distances']
-                                              )[0:samples]
-
+        #signal = auraliser.propagation.apply_atmospheric_absorption(signal,
+                                              #fs,
+                                              #atmosphere,
+                                              #distance,
+                                              #n_blocks=settings['atmospheric_absorption']['taps'],
+                                              #n_distances=settings['atmospheric_absorption']['unique_distances']
+                                              #)[0:samples]
+        signal = auraliser.realtime.apply_atmospheric_attenuation(
+            signal=signal,
+            fs=fs,
+            distance=distance.copy(),
+            nblock=nblock,
+            atmosphere=atmosphere,
+            ntaps=settings['atmospheric_absorption']['taps'],
+            sign=-1,
+            dtype='float64',
+            #distance_reducer=np.mean,
+            )
     # Apply spherical spreading.
     if settings['spreading']['include']:
         logging.info("_apply_propagation_effects: Applying spherical spreading.")
-        signal = auraliser.propagation.apply_spherical_spreading(signal, distance)
+        signal = auraliser.realtime.apply_spherical_spreading(signal, distance.copy(), nblock=nblock)
 
     # Force zeros until first real sample arrives. Should only be done when the time delay (Doppler) is applied.
+    # But force to zero why...? The responsible function should make it zero.
     if settings['doppler']['include'] and settings['doppler']['frequency']:
-        initial_delay = int(distance[0]/atmosphere.soundspeed * fs)
+        initial_distance = distance.samples().peek()
+        # Initial delay in samples
+        initial_delay = int(math.ceil(initial_distance/atmosphere.soundspeed * fs))
         if settings['doppler']['purge_zeros']:
-            signal = signal[initial_delay:]
-        else:
-            signal[0:initial_delay] = 0.0
-
+            signal = signal.drop(initial_delay)
     return signal
 
 
@@ -596,7 +837,7 @@ class Base(object):
         return "{}({})".format(self.__class__.__name__, str(self))
 
     def __eq__(self, other):
-        return self.__dict__ == other.__dict__ and self.__class__ == other.__class__
+        return equality(self, other)
 
     @property
     @abc.abstractmethod
@@ -614,34 +855,6 @@ class Base(object):
         ax.set_ylabel(r'$y$ in m')
         ax.set_zlabel(r'$z$ in m')
         return fig
-
-
-#class Receiver(Base):
-    #"""Receiver
-    #"""
-
-    #position = PositionDescriptor('position')
-    #"""Position of object.
-    #"""
-
-    #def __init__(self, auraliser, name, position):
-        #"""
-        #Constructor.
-        #"""
-
-        #super().__init__(auraliser, name=name)
-
-        #self.position = position
-
-
-    #def auralise(self, sources=None):
-        #"""
-        #Auralise the scene at receiver location.
-
-        #:param sources: List of sources to include. By default all the sources in the scene are included.
-
-        #"""
-        #return self._auraliser.auralise(self, sources)
 
 
 class Receiver(Base):
@@ -665,74 +878,6 @@ class Receiver(Base):
 
         """
         return self._auraliser.auralise(self, sources)
-
-#class Receiver(Base):
-    #"""Receiver
-    #"""
-
-    #position = PositionDescriptor('position')
-    #"""Position of object.
-    #"""
-
-
-    #def __init__(self, auraliser, name, position, channels=None):
-        #"""
-        #Constructor.
-        #"""
-
-        #super().__init__(auraliser, name=name)
-
-        #self.position = position
-
-        #self.channels = [Channel(directivity=Omni())]
-
-    ##@channels.setter
-    ##def channels(self, x):
-        ##self._channels = x
-
-    ##@property
-    ##def channels(self):
-        ##"""Channels.
-        ##"""
-        ##return self._channels
-
-    #def auralise(self, sources=None):
-        #"""
-        #Auralise the scene at receiver location.
-
-        #:param sources: List of sources to include. By default all the sources in the scene are included.
-
-        #"""
-        #return self._auraliser.auralise(self, sources)
-
-
-#class Channel(object):
-    #"""Channel for receiver.
-
-    #"""
-
-    #def __init__(self, directivity=None):
-
-        #self.directivity = directivity if directivity else Omni()
-
-    #def __repr__(self):
-        #return "Channel({}".format(str(self))
-
-    #def __str__(self):
-        #return "({})".format(str(self.directivity))
-
-#class Mono(AbstractReceiver):
-    #"""Mono signal receiver.
-    #"""
-    #pass
-
-#class Stereo(AbstractReceiver):
-    #"""Stereo signal receiver.
-    #"""
-    #pass
-
-#class Custom(AbstractReceiver):
-    #pass
 
 
 class Source(Base):
@@ -791,7 +936,7 @@ class Subsource(Base):
         super().__init__(auraliser, name)
 
         self.source = source
-        self.position_relative = position_relative# if position_relative is not None else np.arrayVector(0.0, 0.0, 0.0)#PointVector()
+        self.position_relative = position_relative# if position_relative is not None else np.arraygeometry.Vector(0.0, 0.0, 0.0)#geometry.Pointgeometry.Vector()
 
     _source = None
 
@@ -854,10 +999,12 @@ class Subsource(Base):
         The signal is the sum of all VirtualSources corrected for directivity.
         """
         #return np.array([src.emission(orientation) for src in self.virtualsources]).sum(axis=0)
-        signal = 0.0
-        for src in self.virtualsources:
-            signal += src.emission(orientation)
-        return signal
+        #signal = 0.0
+        #for src in self.virtualsources:
+            #signal += src.emission(orientation)
+        #return signal
+        #print(orientation)
+        return sum((src.emission(orientation.copy()) for src in self.virtualsources))
 
 
 class Virtualsource(Base):
@@ -874,7 +1021,7 @@ class Virtualsource(Base):
         self.subsource = subsource
         self.signal = signal
 
-        self.directivity = directivity if directivity else Omni()
+        self.directivity = directivity if directivity else acoustics.directivity.Omni()
         """Directivity of the signal.
         """
         #self.modulation = modulation
@@ -929,16 +1076,29 @@ class Virtualsource(Base):
 
         :param orientation: A vector of cartesian coordinates.
         """
-        signal = self._signal_generated * self.directivity.using_cartesian(orientation[:,0], orientation[:,1], orientation[:,2])
-        if self._auraliser.settings['doppler']['include'] and self._auraliser.settings['doppler']['amplitude']: # Apply change in amplitude.
+        #signal = self._signal_generated * self.directivity.using_cartesian(orientation[:,0], orientation[:,1], orientation[:,2])
+        #if self._auraliser.settings['doppler']['include'] and self._auraliser.settings['doppler']['amplitude']: # Apply change in amplitude.
+            #mach = np.gradient(self.subsource.position)[0] * self._auraliser.sample_frequency / self._auraliser.atmosphere.soundspeed
+            #signal = auraliser.propagation.apply_doppler_amplitude_using_vectors(signal, mach, orientation, self.multipole)
+        #return signal
+        settings = self._auraliser.settings
+        nblock = settings['nblock']
+        signal = Stream(self._signal_generated).blocks(nblock=nblock)
+        orientation = orientation.blocks(nblock)
+        directivity = orientation.copy().map(lambda x: self.directivity.using_cartesian(*(x.T)).T)
+        # Signal corrected with directivity
+        signal = signal * directivity
+        if settings['doppler']['include'] and settings['doppler']['amplitude']:
             mach = np.gradient(self.subsource.position)[0] * self._auraliser.sample_frequency / self._auraliser.atmosphere.soundspeed
-            signal = auraliser.propagation.apply_doppler_amplitude_using_vectors(signal, mach, orientation, self.multipole)
+            mach = Stream(mach).blocks(nblock)
+            signal = BlockStream((auraliser.propagation.apply_doppler_amplitude_using_vectors(s, m, o, self.multipole) for s, m, o in zip(signal, mach, orientation)), nblock)
         return signal
 
+#_Mirror = collections.namedtuple('Mirror', ['source_position', 'receiver_position',
+                                            #'emission', 'settings', 'samples',
+                                            #'sample_frequency', 'atmosphere'])
 
-_Mirror = namedtuple('Mirror', ['source_position', 'receiver_position',
-                               'emission', 'settings', 'samples',
-                               'sample_frequency', 'atmosphere'])
+Mirror = collections.namedtuple('Mirror', ['source_position', 'receiver_position', 'emission'])
 """Mirror container.
 """
 
@@ -950,11 +1110,14 @@ def get_default_settings():
 
 _DEFAULT_SETTINGS = {
 
+    'nblock'                :   8192,   # Default blocksize
+    'fs'                    :   44100,  # Default sample frequency
+
     'reflections':{
         'include'           :   True,   # Include reflections
         'mirrors_threshold' :   2,      # Maximum amount of mirrors to include
         'order_threshold'   :   3,      # Maximum order of reflections
-        'update_resolution' :   100,    # Update effectiveness every N samples.
+        'update_resolution' :   8192,    # Update effectiveness every N samples.
         'taps'              :   256,     # Amount of filter taps for ifft mirror strength.
         'force_hard'        :   True,  # Force hard reflections.
         },
@@ -971,8 +1134,8 @@ _DEFAULT_SETTINGS = {
         },
     'atmospheric_absorption':{
         'include'           :   True,   # Include atmospheric absorption
-        'taps'              :   256,    # Amount of filter blocks to use for ifft
-        'unique_distances'  :   100,    # Calculate the atmospheric for N amount unique distances.
+        'taps'              :   256,    # Amount of filter taps to use for ifft
+        #'unique_distances'  :   100,    # Calculate the atmospheric for N amount unique distances.
         },
     'turbulence':{
         'include'           :   False,  # Include modulations and decorrelation due to atmospheric turbulence.
@@ -985,7 +1148,10 @@ _DEFAULT_SETTINGS = {
         'spatial_separation':   True,
         'fraction'          :   1,      # Fraction of filter
         'order'             :   8,      # Order of filter
-        'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
+        #'random_seed'       :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
+        'state'             :   np.random.RandomState(), # Use same state for all propagation paths
+        'ntaps'             :   1024,
+        'ntaps_octaves'     :   128,
         'covariance'        :   'gaussian',
         'window'            :   None,
         'force_constant_distance' : False, # Force constant distance. False, or reducing function.
@@ -1049,7 +1215,8 @@ class Geometry(object):
         """
 
     def __eq__(self, other):
-        return self.__dict__ == other.__dict__ and self.__class__ == other.__class__
+        return equality(self, other)
+        #return (self.__dict__ == other.__dict__) and (self.__class__ == other.__class__)
 
     def render(self):
         """Render the geometry.
@@ -1058,12 +1225,12 @@ class Geometry(object):
 
     @classmethod
     def ground(cls, nbins=get_default_settings()['reflections']['taps']):
-        corners = [Point(-1e5, -1e5, 0.0),
-                   Point(+1e5, -1e5, 0.0),
-                   Point(+1e5, +1e5, 0.0),
-                   Point(-1e5, +1e5, 0.0)
+        corners = [geometry.Point(-1e5, -1e5, 0.0),
+                   geometry.Point(+1e5, -1e5, 0.0),
+                   geometry.Point(+1e5, +1e5, 0.0),
+                   geometry.Point(-1e5, +1e5, 0.0)
                    ]
-        center = Point(0.0, 0.0, 0.0)
+        center = geometry.Point(0.0, 0.0, 0.0)
         impedance = np.zeros(nbins, dtype='complex128')
         g = ism.Wall(corners, center, impedance)
         return cls(walls=[g])

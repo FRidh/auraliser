@@ -27,14 +27,13 @@ def encode(contributions, directivities, resolution=1000):
 
 def mono(contributions):
     """Encode contributions as mono signal.
-    
+
     :param contributions: Contributions
     :returns: Signal
-    
+
     """
-    return sum((signal for signal, orientation in contributions))
-    
-    
+    return sum(signal for signal, orientation in contributions)
+
 def ambisonics(contributions, order, resolution=1000):
     """Encode signal as ambisonics using ACN format.
     """
