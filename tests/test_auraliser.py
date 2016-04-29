@@ -253,7 +253,7 @@ def test_full_model(full_model, settings):
     model.update_settings(settings)
     fs = model.sample_frequency
 
-    signal = Signal.from_stream(mono(rcv.auralise()), fs)
+    signal = Signal(mono(rcv.auralise()).toarray(), fs)
 
     nblock = model.settings['nblock']
 

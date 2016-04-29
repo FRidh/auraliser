@@ -50,6 +50,7 @@ def impulse_response(spectrum, ntaps=None):
     """
     return np.fft.ifftshift(np.fft.irfft(spectrum, n=ntaps)).real
 
+
 def apply_spherical_spreading(signal, distance):
     """Apply spherical spreading to ``signal``.
 
@@ -59,8 +60,8 @@ def apply_spherical_spreading(signal, distance):
 
     :param signal: Signal
     :type signal: :class:`auraliser.signal.Signal`
-
     :rtype: :class:`auraliser.signal.Signal`
+
     """
     return signal / distance # * 1.0
 
@@ -74,8 +75,8 @@ def unapply_spherical_spreading(signal, distance):
 
     :param signal: Signal
     :type signal: :class:`auraliser.signal.Signal`
-
     :rtype: :class:`auraliser.signal.Signal`
+
     """
     return signal * distance # / 1.0
 
@@ -299,25 +300,7 @@ def unapply_doppler_amplitude(signal, mach, angle, multipole):
 
 
 
-def _spatial_separation(A, B, C):
-    """Spatial separation.
 
-    :param A: Source position as function of time.
-    :param B: Reference position, e.g. source position at t=0
-    :param C: Receiver position.
-
-    Each row is a sample and each column a spatial dimension.
-
-    """
-    a = np.linalg.norm(B-C, axis=1)
-    b = np.linalg.norm(A-C, axis=1)
-    c = np.linalg.norm(A-B, axis=1)
-
-    gamma = np.arccos((a**2.0+b**2.0-c**2.0) / (2.0*a*b))
-    spatial_separation = 2.0 * b * np.sin(gamma/2.0)
-    L = b * np.cos(gamma/2.0)
-
-    return spatial_separation, L
 
 
 #from auraliser.scintillations import generate_fluctuations, apply_fluctuations

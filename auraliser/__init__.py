@@ -11,7 +11,7 @@ import auraliser.generator
 import auraliser.propagation
 import auraliser.realtime
 import auraliser.reverter
-import auraliser.scintillations
+#import auraliser.scintillations
 import auraliser.sinks
 
 

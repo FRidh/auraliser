@@ -1,15 +1,12 @@
-import acoustics
-import collections
 import numpy as np
-import operator
-from cytoolz import take, partition, concat, count
 import itertools
-from scintillations import * #get_covariance, impulse_response_fluctuations, tau, correlation_spherical_wave, variance_gaussian
-from functools import partial
+from scintillations.stream import modulate as apply_turbulence
+from scintillations.stream import transverse_speed
 
-from streaming._iterator import blocked
 from streaming.stream import Stream, BlockStream
 from streaming.signal import *
+import streaming.signal
+import logging
 
 
 def apply_atmospheric_attenuation(signal, fs, distance, nblock, atmosphere, ntaps, sign=-1, dtype='float64', distance_reducer=np.mean):
@@ -20,31 +17,78 @@ def apply_atmospheric_attenuation(signal, fs, distance, nblock, atmosphere, ntap
     :param atmosphere: Atmosphere.
     :param ntaps: Amount of filter taps.
     :param sign: Sign.
+    :rtype: :class:`streaming.Stream`
+
+    Compute and apply the attenuation due to atmospheric absorption.
+    The attenuation can change with distance. The attenuation is a magnitude-only filter.
+    We design a linear-phase filter
+
+    .. note:: The filter delay is compensated by dropping the first `ntaps//2` samples.
+
     """
     # Partition `distance` into blocks, and reduce with `distance_reducer`.
     distance = distance.blocks(nblock).map(distance_reducer)
     ir = Stream(atmosphere.impulse_response(d, fs, ntaps=ntaps, sign=sign) for d in distance)
-    return convolve(signal=signal, impulse_responses=ir, nblock=nblock, initial_values=None)
+    signal = convolve_overlap_add(signal, ir, nblock, ntaps)
+    signal = signal.samples().drop(int(ntaps//2)) # Linear phase, correct for group delay caused by FIR filter.
+    return signal
 
 
-def apply_ground_reflection(signal, ir, nblock):
-    """Apply ground reflection strength."""
+def apply_reflection_strength(emission, nblock, spectra, effective, ntaps, force_hard):
+    """Apply mirror source strength.
 
-    return convolve(signal=signal, impulse_responses=ir, nblock=nblock)
+    :param signal: Signal.
+    :param nblock: Amount of samples per block.
+    :param spectra: Spectrum per block.
+    :param effective: Whether the source is effective or not.
+    :param ntaps: Amount of filter taps.
+    :param force_hard: Whether to force a hard ground.
+    :returns: Signal with correct strength.
+
+    .. warning:: This operation will cause a delay that may vary over time.
+
+    """
+    if effective is not None:
+        emission = emission * effective
+
+    if force_hard:
+        logging.info("_apply_source_effects: Hard ground.")
+    else:
+        logging.info("_apply_source_effects: Soft ground.")
+        impulse_responses = Stream(impulse_response(s, ntaps) for s in spectra)
+        emission = convolve_overlap_add(emission.blocks(nblock), impulse_responses, nblock, ntaps)
+        # Filter has a delay we need to correct for.
+        #emission = emission.samples().drop(int(ntaps//2))
+    return emission
+
+
+#def apply_ground_reflection(signal, ir, nblock):
+    #"""Apply ground reflection strength.
+
+    #:param signal: Signal before ground reflection strength is applied.
+    #:param ir: Impulse response per block.
+    #:param nblock: Amount of samples per block.
+    #:returns: Signal after reflection strength is applied.
+    #:type: :class:`streaming.BlockStream`
+    #"""
+
+    #signal = convolve(signal=signal, impulse_responses=ir, nblock=nblock)
+
 
 def apply_doppler(signal, delay, fs, initial_value=0.0):
     """Apply Doppler shift.
+
+    :param signal: Signal before Doppler shift.
+    :param delay: Propagation delay.
+    :param fs: Constant sample frequency.
+    :returns: Doppler-shifted signal.
+    :rtype: :class:`streaming.Stream`
+
     """
+    np.savetxt("/tmp/delay.csv", delay.copy().toarray())
     return vdl(signal, times(1./fs), delay, initial_value=initial_value)
 
-
-def apply_reflection_strength(signal, fs, spectrum):
-    """Apply the strength of the mirror source.
-    """
-    return convolve(blocked(nblock, signal), nblock, ir)
-
-
-def apply_spherical_spreading(signal, distance, nblock=None):#, nblock):
+def apply_spherical_spreading(signal, distance):#, nblock):
     """Apply spherical spreading.
 
     :param signal. Signal. Iterable.
@@ -52,25 +96,23 @@ def apply_spherical_spreading(signal, distance, nblock=None):#, nblock):
     :param nblock: Amount of samples in block.
 
     """
-    if nblock is not None:
-        signal = signal.blocks(nblock)
-        distance = distance.blocks(nblock)
     return signal / distance
 
 
-def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed,
-                     scale, include_logamp, include_phase, state=None, window=None, **kwargs):
 
-    frequency = 1000.0
-    wavenumber = 2.0 * np.pi * frequency / soundspeed
-    # Generate turbulence fluctuations
-    logamp, phase = _turbulence_fluctuations(spatial_separation=spatial_separation, distance=distance, wavenumber=wavenumber, scale=scale, fs=fs, nblock=nblock)
+#def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed,
+                     #scale, include_logamp, include_phase, state=None, window=None, **kwargs):
 
-    # Apply fluctuations to signal
-    signal = _apply_logamp_fluctuations(signal, logamp, nblock)
-    #signal = _apply_phase_fluctuations(signal, phase, frequency, fs)
+    #frequency = 1000.0
+    #wavenumber = 2.0 * np.pi * frequency / soundspeed
+    ## Generate turbulence fluctuations
+    #logamp, phase = _turbulence_fluctuations(spatial_separation=spatial_separation, distance=distance, wavenumber=wavenumber, scale=scale, fs=fs, nblock=nblock)
 
-    return signal
+    ## Apply fluctuations to signal
+    #signal = _apply_logamp_fluctuations(signal, logamp, nblock)
+    ##signal = _apply_phase_fluctuations(signal, phase, frequency, fs)
+
+    #return signal
 
 #def noise_generator(nblock, color='white', cycle=False, state=None):
 
@@ -150,146 +192,208 @@ def nextpow2(x):
     return int(2**np.ceil(np.log2(x)))
 
 
-def _turbulence_fluctuations_low(nblock, ntaps, fs, speed, correlation_length, window=None, state=None):
-    """Calculate fluctuations due to turbulence.
+#def _generate_gaussian_fluctuations(nblock, ntaps, fs, correlation_time, window=None, state=None):
+    #"""Calculate fluctuations due to turbulence.
 
-    :returns: Fluctuations with variance 1.
+    #:returns: Fluctuations with variance 1.
 
-    Because the transverse velocity can change over time, the lower sample frequency will vary as well.
-    This causes problems and therefore we have to fix the lower sample frequency. However, by doing so,
-    we might have too few taps.
+    #Because the transverse velocity can change over time, the lower sample frequency will vary as well.
+    #This causes problems and therefore we have to fix the lower sample frequency. However, by doing so,
+    #we might have too few taps.
 
-    The correct variance needs to be applied to obtain actual logamp and phase fluctuations.
+    #The correct variance needs to be applied to obtain actual logamp and phase fluctuations.
 
-    .. warning:: This is the downsampled version!
-    """
+    #.. warning:: This is the downsampled version!
+    #"""
 
-    # Correlation as function of time. We need to downsample the speed.
-    # We then calculate the correlation in a block, using the mean speed.
-    # NOTE: low-pass filter speed before downsampling!
-    _tau = tau(ntaps, fs)
+    ## Correlation as function of time. We need to downsample the speed.
+    ## We then calculate the correlation in a block, using the mean speed.
+    ## NOTE: low-pass filter speed before downsampling!
+    #_tau = tau(ntaps, fs)
 
-    correlation_time = correlation_length / speed
+    ##correlation_time = correlation_length / speed
 
-    correlation = correlation_time.map(lambda x: correlation_spherical_wave(_tau, x))
+    #correlation = correlation_time.map(lambda x: correlation_spherical_wave(_tau, x))
 
-    ir = Stream(impulse_response_fluctuations(c, fs, window=window) for c in correlation)
+    #ir = Stream(impulse_response_fluctuations(c, fs, window=window) for c in correlation)
 
-    # Noise generator. Samples from the standard normal distribution.
-    state = state if state is not None else np.random.RandomState()
-    noise = BlockStream( (state.randn(nblock) for i in itertools.count()), nblock)
+    ## Noise generator. Samples from the standard normal distribution.
+    #state = state if state is not None else np.random.RandomState()
+    #noise = BlockStream( (state.randn(nblock) for i in itertools.count()), nblock)
 
-    # Fluctuations at lower sample frequency. We normalise with the standard deviation.
-    fluctuations = convolve(noise, ir, nblock, ntaps).blocks(nblock)
-    std = fluctuations.copy().std()
-    #print(type(std))
-    fluctuations = fluctuations / std
-    return fluctuations
-
-
-def turbulence_fluctuations(nblock, fs, fs_low, ntaps, speed, correlation_length, window=None, state=None):
-    """Calculate fluctuations due to turbulence.
-
-    :param ntaps: Amount of taps in down-sampled version.
-
-    """
-
-    # We create first a down-sampled fluctuations signal with sample frequency `fs_low`.
-    ratio = fs / fs_low
-    nblock_low = nblock/ratio
-    if nblock_low < ntaps:
-        nblock_low = ntaps
-    #nblock_low = nextpow2(nblock_low)
-    #ntaps = nextpow2(ntaps)
-
-    # Time streams
-    t = times(1./fs)
-    t_low = times(1./fs_low)
-
-    # Downsample transverse speed
-    speed_low = interpolate(t.copy(), speed.copy(), t_low.copy())
-
-    # Calculate fluctuations
-    fluctuations = _turbulence_fluctuations_low(nblock_low, ntaps, fs_low, speed_low, correlation_length, window=window, state=state)
-    # Upsample fluctuations to requested sample frequency.
-    fluctuations = interpolate(t_low, fluctuations, t)
-
-    return fluctuations
-
-def _turbulence_apply_logamp_variance(nblock, fluctuations, distance, wavenumber, correlation_length, mean_mu_squared, include_saturation):
-    logamp_func = lambda d : variance_gaussian_with_saturation(d, wavenumber, correlation_length, mean_mu_squared, include_saturation=include_saturation)
-    # Variances as function of distance
-    variance_logamp = distance.blocks().map(logamp_func)
-    # Apply correct variance. Multiply fluctuations with standard deviation element for element.
-    logamp = fluctuations.blocks(nblock) * variance_logamp.sqrt()
-    return logamp
-
-def _turbulence_apply_phase_variance(nblock, fluctuations, distance, wavenumber, correlation_length, mean_mu_squared):
-    phase_func = lambda d : variance_gaussian(d, wavenumber, correlation_length, mean_mu_squared)
-    # Variances as function of distance
-    variance_phase = distance.blocks().map(phase_func)
-    # Apply correct variance. Multiply fluctuations with standard deviation element for element.
-    phase = fluctuations.blocks(nblock) * variance_phase.sqrt()
-    return phase
-
-def _turbulence_apply_logamp_fluctuations(signal, logamp):
-    return signal * np.exp(logamp)
-
-def _turbulence_apply_phase_fluctuations(signal, phase, frequency, fs):
-    omega = (2.0*np.pi*frequency)
-    delay = phase / omega
-    signal = vdl(signal, times(1./fs), delay)
-    return signal
+    ## Fluctuations at lower sample frequency. We normalise with the standard deviation.
+    #fluctuations = convolve(noise, ir, nblock, ntaps).blocks(nblock)
+    #std = fluctuations.copy().std()
+    ##print(type(std))
+    #fluctuations = fluctuations / std
+    #return fluctuations
 
 
+#def turbulence_fluctuations(nblock, fs, fs_low, ntaps, speed, correlation_length, window=None, state=None, time=None):
+    #"""Calculate fluctuations due to turbulence.
 
-def turbulence_fluctuations_spectral(signal, frequencies, nblock, fs, fs_low,
-                                     ntaps, ntaps_octaves, speed, correlation_length, window, state,
-                                     distance, soundspeed, mean_mu_squared, include_logamp=True,
-                                     include_phase=True, include_saturation=True):
-    """Gaussian fluctuations with time-variant transverse speed.
-    """
+    #:param ntaps: Amount of taps in down-sampled version.
 
-    # Frequency bands for which we calculate series of fluctuations
-    frequencies = frequencies[frequencies.upper < fs/2.0]
-    wavenumbers = 2. * np.pi * frequencies.center / soundspeed
-    nbands = len(frequencies)
+    #"""
 
-    distance = distance.blocks(nblock) # Doing this here saves having to block in every copy after using tee
+    ## We create first a down-sampled fluctuations signal with sample frequency `fs_low`.
+    #ratio = fs / fs_low
+    #nblock_low = nblock/ratio
+    #if nblock_low < ntaps:
+        #nblock_low = ntaps
+    ##nblock_low = nextpow2(nblock_low)
+    ##ntaps = nextpow2(ntaps)
 
-    #----Offline bandpass filtering because IIR filtering is not yet implemented-----------------------------
-    signal = acoustics.Signal(signal.toarray(), fs)
-    frequencies, signals = signal.bandpass_frequencies(frequencies, order=8, purge=True, zero_phase=True)
-    signals = (Stream(signal).blocks(nblock) for signal in signals)
+    ## Time streams
+    #if time is None:
+        #time = streaming.signal.times(1./fs)
+    #time_low = streaming.signal.times(1./fs_low)
 
-    ## Create bandpass filters to filter our input signal
-    #filters = (bandpass_filter(f_low, f_up, fs, ntaps_octaves) for f_low, f_up in zip(frequencies.lower, frequencies.upper))
-    ## And split our signal so we have one copy per frequency band
-    #signals = signal.blocks(nblock).tee(nbands)
-    ## Bandpass the signals
-    #signals = (convolve(signal, constant(filt), nblock).blocks(nblock) for filt, signal in zip(filters, signals))
-    # --------------------------------------------------------------------------------------------------------
+    ## Downsample transverse speed
+    #speed_low = interpolate(time.copy(), speed.copy(), time_low.copy())
 
-    # Generic series of fluctuations. We need to apply the correct variance later
-    fluctuations = turbulence_fluctuations(nblock, fs, fs_low, ntaps, speed, correlation_length, window, state).blocks(nblock)
+    ## Calculate fluctuations
+    #correlation_time = correlation_length/speed_low
+    #fluctuations = _generate_gaussian_fluctuations(nblock_low, ntaps, fs_low, correlation_time, window=window, state=state)
+    ## Upsample fluctuations to requested sample frequency.
+    #fluctuations = interpolate(time_low, fluctuations, time)
+
+    #return fluctuations
+
+#def turbulence_apply_logamp_variance(nblock, fluctuations, distance, wavenumber, correlation_length, mean_mu_squared, include_saturation):
+    #logamp_func = lambda d : variance_gaussian(d, wavenumber, correlation_length, mean_mu_squared, include_saturation=include_saturation)
+    ## Variances as function of distance
+    #variance_logamp = distance.blocks(nblock).map(logamp_func)
+    ## Apply correct variance. Multiply fluctuations with standard deviation element for element.
+    #logamp = fluctuations.blocks(nblock) * variance_logamp.sqrt()
+    #return logamp
+
+#def turbulence_apply_phase_variance(nblock, fluctuations, distance, wavenumber, correlation_length, mean_mu_squared):
+    #phase_func = lambda d : variance_gaussian(d, wavenumber, correlation_length, mean_mu_squared)
+    ## Variances as function of distance
+    #variance_phase = distance.blocks(nblock).map(phase_func)
+    ## Apply correct variance. Multiply fluctuations with standard deviation element for element.
+    #phase = fluctuations.blocks(nblock) * variance_phase.sqrt()
+    #return phase
+
+#def turbulence_apply_logamp_fluctuations(signal, logamp):
+    #return signal * np.exp(logamp)
+
+#def turbulence_apply_phase_fluctuations(signal, phase, frequency, fs):
+    #omega = (2.0*np.pi*frequency)
+    #delay = phase / omega
+    #signal = vdl(signal, times(1./fs), delay)
+    #return signal
 
 
 
-    if include_logamp:
-        # Logamp fluctuations
-        logamps = map(lambda w: _turbulence_apply_logamp_variance(nblock, fluctuations.copy(), distance.copy(), w, correlation_length, mean_mu_squared, include_saturation), wavenumbers)
-        # and apply to our signal
-        signals = map(_turbulence_apply_logamp_fluctuations, signals, logamps)
+#def turbulence_fluctuations_spectral(signal, frequencies, nblock, fs, fs_low,
+                                     #ntaps, ntaps_octaves, speed, correlation_length, window, seed,
+                                     #distance, soundspeed, mean_mu_squared, include_logamp=True,
+                                     #include_phase=True, include_saturation=True):
+    #"""Gaussian fluctuations with time-variant transverse speed.
+    #"""
 
-    if include_phase:
-        # Phase fluctuations
-        phases  = map(lambda w: _turbulence_apply_phase_variance(nblock, fluctuations.copy(), distance.copy(), w, correlation_length, mean_mu_squared), wavenumbers)
-        # and apply to our signal
-        signals = map(_turbulence_apply_phase_fluctuations, signals, phases, frequencies.center, itertools.cycle([fs]))
+    ## Frequency bands for which we calculate series of fluctuations
+    #frequencies = frequencies[frequencies.upper < fs/2.0]
+    #wavenumbers = 2. * np.pi * frequencies.center / soundspeed
+    #nbands = len(frequencies)
 
-    # Add the bandpassed signals to obtain the final result
-    signal = sum(signal.blocks(nblock) for signal in signals )
-    return signal
+    ## Create PRNG with given seed
+    #state = np.random.RandomState(seed)
+
+    #distance = distance.blocks(nblock) # Doing this here saves having to block in every copy after using tee
+
+    ## Generic series of fluctuations. We need to apply the correct variance later
+    #fluctuations = turbulence_fluctuations(nblock, fs, fs_low, ntaps, speed, correlation_length, window, state).blocks(nblock)
+
+    #if include_logamp:
+        ##----Offline bandpass filtering because IIR filtering is not yet implemented-----------------------------
+        #signal = acoustics.Signal(signal.toarray(), fs)
+        #frequencies, signals = signal.bandpass_frequencies(frequencies, order=8, purge=True, zero_phase=True)
+        #signals = (Stream(signal).blocks(nblock) for signal in signals)
+
+        ### Create bandpass filters to filter our input signal
+        ##filters = (bandpass_filter(f_low, f_up, fs, ntaps_octaves) for f_low, f_up in zip(frequencies.lower, frequencies.upper))
+        ### And split our signal so we have one copy per frequency band
+        ##signals = signal.blocks(nblock).tee(nbands)
+        ### Bandpass the signals
+        ##signals = (convolve(signal, constant(filt), nblock).blocks(nblock) for filt, signal in zip(filters, signals))
+        ## --------------------------------------------------------------------------------------------------------
+        ## Logamp fluctuations
+        #logamps = map(lambda w: turbulence_apply_logamp_variance(nblock, fluctuations.copy(), distance.copy(), w, correlation_length, mean_mu_squared, include_saturation), wavenumbers)
+        ## and apply to our signal
+        #signal = sum(map(turbulence_apply_logamp_fluctuations, signals, logamps))
+
+
+    ### Add the bandpassed signals to obtain the final result
+    ##signal = sum(signal.blocks(nblock) for signal in signals )
+
+    ## Phase variance ~ frequency^2, thus phase is linear with frequency, and group delay is constant.
+
+    #if include_phase:
+        ## Phase fluctuations
+        #frequency = 1.0 # Frequency independent.
+        #wavenumber = 2.*np.pi*frequency / soundspeed
+        #phase  = turbulence_apply_phase_variance(nblock, fluctuations.copy(), distance.copy(), wavenumber, correlation_length, mean_mu_squared)
+        ## and apply to our signal
+        #signal = turbulence_apply_phase_fluctuations(signal, phase, frequency, fs).blocks(nblock)
+
+    #return signal
+
+
+
+#def turbulence_fluctuations_spectral(signal, frequencies, nblock, fs, fs_low,
+                                     #ntaps, ntaps_octaves, speed, correlation_length, window, seed,
+                                     #distance, soundspeed, mean_mu_squared, include_logamp=True,
+                                     #include_phase=True, include_saturation=True):
+    #"""Gaussian fluctuations with time-variant transverse speed.
+    #"""
+
+    ## Frequency bands for which we calculate series of fluctuations
+    ##frequencies = frequencies[frequencies.upper < fs/2.0]
+    #ntaps2 = 128
+    #frequencies = np.linspace(0.0, fs/2.0, ntaps2//2)
+    #wavenumbers = 2. * np.pi * frequencies / soundspeed
+    ##nbands = len(frequencies)
+
+    ## Create PRNG with given seed
+    #state = np.random.RandomState(seed)
+
+    #distance = distance.blocks(nblock) # Doing this here saves having to block in every copy after using tee
+
+    ## Generic series of fluctuations. We need to apply the correct variance later
+    #fluctuations = turbulence_fluctuations(nblock, fs, fs_low, ntaps, speed, correlation_length, window, state).blocks(nblock)
+
+    #if include_logamp:
+        ## Apply fluctuations
+        #logamp = fluctuations.copy()
+        #signal = signal * np.exp(logamp)
+        #print(signal.peek())
+        ## Calculate spectral weighting of fluctuations
+        #logamp_func = lambda d : variance_gaussian(d, wavenumbers, correlation_length, mean_mu_squared, include_saturation=include_saturation)
+        #variance_logamp = distance.copy().mean().map(logamp_func)
+        #print(variance_logamp.peek())
+        #ir = variance_logamp.map(lambda x: np.fft.ifftshift(np.fft.irfft(np.sqrt(x), n=ntaps2)))#*np.hanning(ntaps2))
+        #print(ir.peek())
+        ## And apply to our signal
+        #signal = streaming.signal.convolve(signal, ir, nblock)
+        #print(signal.peek())
+
+    #if include_phase:
+        ## Phase variance ~ frequency^2, thus phase is linear with frequency, and group delay is constant.
+        ## Phase fluctuations
+        #frequency = 1.0 # Frequency independent.
+        #wavenumber = 2.*np.pi*frequency / soundspeed
+        #phase  = _turbulence_apply_phase_variance(nblock, fluctuations.copy(), distance.copy(), wavenumber, correlation_length, mean_mu_squared)
+        ## and apply to our signal
+        #signal = _turbulence_apply_phase_fluctuations(signal, phase, frequency, fs).blocks(nblock)
+
+    #return signal
+
+
+
+
 
 #def _turbulence_fluctuations(speed, distance, wavenumber, scale, fs, nblock,
                              #ntaps, window=None, model='gaussian', **kwargs):
@@ -362,22 +466,25 @@ def turbulence_fluctuations_spectral(signal, frequencies, nblock, fs, fs_low,
     #ir = impulse_response_fluctuations(cov, window=window)
     #return ir
 
-def _apply_logamp_fluctuations(signal, logamp):
-    """Apply log-amplitude fluctuations to signal.
+#def _apply_logamp_fluctuations(signal, logamp):
+    #"""Apply log-amplitude fluctuations to signal.
 
-    :param signal: Signal. Iterable.
-    :param logamp: Log-amplitude fluctuations. Iterable.
+    #:param signal: Signal. Iterable.
+    #:param logamp: Log-amplitude fluctuations. Iterable.
 
-    """
-    return signal * np.exp(logamp)
-    #yield from concat(map(lambda x, y: x*np.exp(y), zip(blocked(nblock, signal), blocked(nblock, logamp))))
+    #"""
+    #return signal * np.exp(logamp)
+    ##yield from concat(map(lambda x, y: x*np.exp(y), zip(blocked(nblock, signal), blocked(nblock, logamp))))
 
-def _apply_phase_fluctuations(signal, phase, frequency, fs):
-    """Apply phase fluctuations using a variable delay line.
-    """
-    delay = phase/(2.0*np.pi*frequency)
-    return vdl(signal, times(1./fs), delay, initial_value=0.0)
+#def _apply_phase_fluctuations(signal, phase, frequency, fs):
+    #"""Apply phase fluctuations using a variable delay line.
+    #"""
+    #delay = phase/(2.0*np.pi*frequency)
+    #return vdl(signal, times(1./fs), delay, initial_value=0.0)
 
+
+import acoustics
+from cytoolz import partition, concat
 
 def sound_pressure_level(signal, fs, nblock, time=0.125, method='average'):
     """
