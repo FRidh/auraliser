@@ -9,7 +9,7 @@ import streaming.signal
 import logging
 
 
-def apply_atmospheric_attenuation(signal, fs, distance, nblock, atmosphere, ntaps, sign=-1, dtype='float64', distance_reducer=np.mean):
+def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, sign=-1, dtype='float64', distance_reducer=np.mean):
     """Apply atmospheric attenuation to signal.
 
     :param distance: Iterable with distances.
@@ -27,9 +27,9 @@ def apply_atmospheric_attenuation(signal, fs, distance, nblock, atmosphere, ntap
 
     """
     # Partition `distance` into blocks, and reduce with `distance_reducer`.
-    distance = distance.blocks(nblock).map(distance_reducer)
+    distance = distance.blocks(nhop).map(distance_reducer)
     ir = Stream(atmosphere.impulse_response(d, fs, ntaps=ntaps, sign=sign) for d in distance)
-    signal = convolve_overlap_add(signal, ir, nblock, ntaps)
+    signal = convolve_overlap_save(signal, ir, nhop, ntaps)
     signal = signal.samples().drop(int(ntaps//2)) # Linear phase, correct for group delay caused by FIR filter.
     return signal
 
@@ -483,27 +483,3 @@ def nextpow2(x):
     #return vdl(signal, times(1./fs), delay, initial_value=0.0)
 
 
-import acoustics
-from cytoolz import partition, concat
-
-def sound_pressure_level(signal, fs, nblock, time=0.125, method='average'):
-    """
-
-    :param time: Integration or averaging time.
-
-    .. note:: Might run out of sync.
-    """
-
-    if method=='average':
-        func = acoustics.standards.iec_61672_1_2013.time_averaged_sound_level
-    elif method=='weighting':
-        func = acoustics.standards.iec_61672_1_2013.time_weighted_sound_level
-    else:
-        raise ValueError("Invalid method")
-
-    if nblock < int(round(fs*time)):
-        raise ValueError("Block size is smaller than the samples used for integration/averaging.")
-
-    partitioned_signal = partition(signal, nblock)
-
-    yield from concat(map(acoustics.standards.iso_tr_25417_2007.equivalent_sound_pressure_level, blocked))

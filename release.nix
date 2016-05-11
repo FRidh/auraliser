@@ -7,7 +7,7 @@ pythonPackages.buildPythonPackage rec {
   src = ./.;
 
   buildInputs = with pythonPackages; [ pytest ];
-  propagatedBuildInputs = with pythonPackages; [ acoustics cytoolz dill geometry ism matplotlib numba numpy scintillations scipy streaming turbulence ];
+  propagatedBuildInputs = with pythonPackages; [ acoustics cytoolz dill geometry ism matplotlib numba numpy scintillations streaming scipy streaming turbulence ];
 
   doCheck = false;
 }

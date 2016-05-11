@@ -731,6 +731,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                                      distance=_distance,
                                                      soundspeed=atmosphere.soundspeed,
                                                      mean_mu_squared=settings['turbulence']['mean_mu_squared'],
+                                                     fmin=100.
                                                      ntaps_corr=settings['turbulence']['ntaps_corr'],
                                                      ntaps_spectra=settings['turbulence']['ntaps_spectra'],
                                                      window=settings['turbulence']['window'],
@@ -756,7 +757,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
             signal=signal,
             fs=fs,
             distance=distance.copy(),
-            nblock=nblock,
+            nhop=nblock,
             atmosphere=atmosphere,
             ntaps=settings['atmospheric_absorption']['taps'],
             sign=-1,
@@ -1102,7 +1103,7 @@ _DEFAULT_SETTINGS = {
         'frequency'         :   True,   # Include the frequency shift.
         'amplitude'         :   True,   # Include the change in intensity.
         'purge_zeros'       :   False,  # Purge the (initial) zeros due to the delay in arrival.
-        'interpolation'     :   'lanczos',   # Lanczos interpolation
+        'interpolation'     :   'linear',   # Lanczos interpolation
         'kernelsize'        :   10,
         },
     'spreading':{
@@ -1115,7 +1116,7 @@ _DEFAULT_SETTINGS = {
         },
     'turbulence':{
         'include'           :   False,  # Include modulations and decorrelation due to atmospheric turbulence.
-        'mean_mu_squared'   :   3.0e-6,
+        'mean_mu_squared'   :   3.0e-7,
         'correlation_length':   20.0,
 
         'saturation'        :   True,  # Include log-amplitude saturation
