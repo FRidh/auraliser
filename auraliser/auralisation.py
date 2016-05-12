@@ -731,7 +731,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                                      distance=_distance,
                                                      soundspeed=atmosphere.soundspeed,
                                                      mean_mu_squared=settings['turbulence']['mean_mu_squared'],
-                                                     fmin=100.
+                                                     fmin=settings['turbulence']['fs_minimum'],
                                                      ntaps_corr=settings['turbulence']['ntaps_corr'],
                                                      ntaps_spectra=settings['turbulence']['ntaps_spectra'],
                                                      window=settings['turbulence']['window'],
@@ -1118,7 +1118,7 @@ _DEFAULT_SETTINGS = {
         'include'           :   False,  # Include modulations and decorrelation due to atmospheric turbulence.
         'mean_mu_squared'   :   3.0e-7,
         'correlation_length':   20.0,
-
+        'fs_minimum'        :   100.,    # Sample frequency at which to compute the fluctuations.
         'saturation'        :   True,  # Include log-amplitude saturation
         'amplitude'         :   True,   # Amplitude modulations
         'phase'             :   True,   # Phase modulations
