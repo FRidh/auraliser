@@ -41,6 +41,7 @@ import streaming
 from streaming.stream import Stream, BlockStream, repeat_each
 from streaming.signal import constant
 import cytoolz
+import copy
 
 @dispatch(object, object)
 def unequality(a, b):
@@ -410,7 +411,8 @@ class Auraliser(object):
         #mirrors = model.determine(strongest=self.settings['reflections']['mirrors_threshold'])
         #yield from mirrors
 
-    def _auralise_subsource(self, subsource, receiver):
+    @staticmethod
+    def _auralise_subsource(subsource, receiver, settings, geometry, atmosphere):
         """Synthesize the signal of a subsource.
 
         We check whether reflections are included or not.
@@ -420,7 +422,7 @@ class Auraliser(object):
         logging.info("_auralise_subsource: Generating subsource emission signals.")
         subsource.generate_signals()
 
-        nblock = self.settings['nblock']
+        nblock = settings['nblock']
 
         # Make sure the positions are streams
         subsource_position = Stream(iter(subsource.position)).blocks(nblock)
@@ -428,35 +430,36 @@ class Auraliser(object):
 
         # Determine mirrors
         logging.info("_auralise_subsource: Determine mirrors.")
-        if self.settings['reflections']['include'] and len(self.geometry.walls) > 0: # Are reflections possible?
+        if settings['reflections']['include'] and len(geometry.walls) > 0: # Are reflections possible?
             logging.info("_auralise_subsource: Searching for mirrors. Reflections are enabled, and we have walls.")
-            #resolution = self.settings['reflections']['update_resolution']
+            #resolution = settings['reflections']['update_resolution']
 
-            mirrors = _ism_mirrors(subsource_position, receiver_position, subsource.signal, self.geometry.walls, self.settings)
+            mirrors = _ism_mirrors(subsource_position, receiver_position, subsource.signal, geometry.walls, settings)
 
         else: # No walls, so no reflections. Therefore the only source is the real source.
             logging.info("_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
             #emission = subsource.signal( unit_vector(receiver.position - subsource.position)) # Use non-Stream here for now...
-            emission = subsource.signal(unit_vector_stream(receiver_position - subsource_position))
+            emission = subsource.signal(unit_vector_stream(receiver_position.copy() - subsource_position.copy()))
             # Final sources
             mirrors = [ Mirror(subsource_position, receiver_position, emission) ]
 
         # Yield contribution of each mirror source.
         for mirror in mirrors:
             #print(mirror.receiver_position.peek())
-            signal = _apply_propagation_effects(mirror.source_position.copy(), mirror.receiver_position.copy(), mirror.emission, self.settings, self.samples, self.sample_frequency, self.atmosphere)
+            signal = _apply_propagation_effects(mirror.source_position.copy(), mirror.receiver_position.copy(), mirror.emission, settings, settings['fs'], atmosphere)
             # Orientation is the unit vector from source to receiver
-            orientation = unit_vector_stream(mirror.source_position - mirror.receiver_position)
+            orientation = unit_vector_stream(mirror.source_position.copy() - mirror.receiver_position.copy())
             yield signal, orientation
 
 
-    def _auralise_source(self, source, receiver):
+    @staticmethod
+    def _auralise_source(source, receiver, settings, geometry, atmosphere):
         """Synthesize the signal at `receiver` due to `source`. This includes all subsources and respective mirror sources.
         """
         logging.info("_auralise_source: Auralising source {}".format(source.name))
 
         for subsource in source.subsources:
-            signals_and_orientations = self._auralise_subsource(subsource, receiver)
+            signals_and_orientations = Auraliser._auralise_subsource(subsource, receiver, settings, geometry, atmosphere)
             yield from signals_and_orientations
 
         logging.info("_auralise_source: Finished auralising source {}".format(source.name))
@@ -476,8 +479,13 @@ class Auraliser(object):
         sources = sources if sources else self.sources
         sources = (self.get_object(source) for source in sources)
 
+        # We don't want to be able to update the settings during an auralization
+        settings = copy.deepcopy(self.settings)
+        geometry = copy.deepcopy(self.geometry)
+        atmosphere = copy.deepcopy(self.atmosphere)
+
         for source in sources:
-            yield from self._auralise_source(source, receiver)
+            yield from Auraliser._auralise_source(source, receiver, settings, geometry, atmosphere)
 
 
     def plot(self, **kwargs):
@@ -633,7 +641,7 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
 
 
 
-def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, atmosphere):
+def _apply_propagation_effects(source, receiver, signal, settings, fs, atmosphere):
     """Apply the propagation filters for this specific source-mirror-receiver combination.
 
     :param source: Source position
@@ -644,7 +652,6 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     :type signal: :class:`Stream` or :class:`BlockStream`
     :param settings: Settings
     :type settings: :func:`dict`
-    :param samples: Amount of samples.
     :param fs: Sample frequency
     :param atmosphere: Atmosphere
     :type atmosphere: :class:`acoustics.atmosphere.Atmosphere`
@@ -693,12 +700,6 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     # Apply delay due to spreading (Doppler shift)
     if settings['doppler']['include'] and settings['doppler']['frequency']:
         logging.info("_apply_propagation_effects: Applying Doppler frequency shift.")
-        #signal = auraliser.propagation.apply_doppler(signal,
-                                                     #distance/atmosphere.soundspeed,
-                                                     #fs,
-                                                     #method=settings['doppler']['interpolation'],
-                                                     #kernelsize=settings['doppler']['kernelsize'],
-                                                     #)
         signal = auraliser.realtime.apply_doppler(signal=signal,
                                                   delay=distance.copy()/atmosphere.soundspeed,
                                                   fs=fs)
@@ -715,7 +716,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
         _velocity = Stream(velocity.copy().blocks(nhop).map(cytoolz.first))
         _orientation = unit_vector_stream(Stream(distance_vector.copy().blocks(nhop).map(cytoolz.first)))
         #_orientation = Stream(_orientation_sr.copy().blocks(nhop).map(lambda x: x[0]))
-        _transverse_speed = Stream(map(auraliser.realtime.transverse_speed, _velocity, _orientation))
+        _transverse_speed = Stream(iter(map(auraliser.realtime.transverse_speed, _velocity, _orientation)))
         #print(next(_distance))
         #print(next(_velocity))
         #print(next(_orientation))
@@ -727,8 +728,8 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
                                                      fs=fs,
                                                      nhop=nhop,
                                                      correlation_length=settings['turbulence']['correlation_length'],
-                                                     speed=_transverse_speed,
-                                                     distance=_distance,
+                                                     speed=_transverse_speed.copy(),
+                                                     distance=_distance.copy(),
                                                      soundspeed=atmosphere.soundspeed,
                                                      mean_mu_squared=settings['turbulence']['mean_mu_squared'],
                                                      fmin=settings['turbulence']['fs_minimum'],
@@ -746,13 +747,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     # Apply atmospheric absorption.
     if settings['atmospheric_absorption']['include']:
         logging.info("_apply_propagation_effects: Applying atmospheric absorption.")
-        #signal = auraliser.propagation.apply_atmospheric_absorption(signal,
-                                              #fs,
-                                              #atmosphere,
-                                              #distance,
-                                              #n_blocks=settings['atmospheric_absorption']['taps'],
-                                              #n_distances=settings['atmospheric_absorption']['unique_distances']
-                                              #)[0:samples]
+
         signal = auraliser.realtime.apply_atmospheric_attenuation(
             signal=signal,
             fs=fs,
@@ -767,11 +762,11 @@ def _apply_propagation_effects(source, receiver, signal, settings, samples, fs, 
     # Force zeros until first real sample arrives. Should only be done when the time delay (Doppler) is applied.
     # But force to zero why...? The responsible function should make it zero.
     if settings['doppler']['include'] and settings['doppler']['frequency'] and settings['doppler']['purge_zeros']:
-        initial_distance = distance.samples().peek()
+        initial_distance = distance.copy().samples().peek()
         # Initial delay in samples
         initial_delay = int(math.ceil(initial_distance/atmosphere.soundspeed * fs))
         signal = signal.samples().drop(initial_delay)
-
+        del initial_distance, initial_delay
 
     # Clear memory to prevent memory leaks
     del source, receiver, distance_vector, distance, velocity, speed
