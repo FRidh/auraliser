@@ -541,28 +541,34 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
     """Determine mirror sources and their emissions.
 
     :param subsource_position: Position of the subsource.
+    :type subsource_position: :class:`Stream`
     :param receiver_position: Position of the subsource.
+    :type receiver_position: :class:`Stream`
     :param emission: Emission generator.
     :param settings: Settings.
+    :type settings: :func:`dict`
     :returns: Yields mirror sources with emission signals.
     """
     logging.info("_ism_mirrors: Determining mirror sources and their emissions.")
     resolution = settings['reflections']['update_resolution']
     nblock = settings['nblock']
-    subsource_position = subsource_position.blocks(resolution)
-    receiver_position = receiver_position.blocks(resolution)
+
+
+    subsource_position_resolution = subsource_position.copy().blocks(resolution)
+    subsource_position = subsource_position.blocks(nblock)
 
     # Obtain mirrors from Image Source Method.
     # Determine mirror sources every `n` samples. We pick the first sample of each block.
-    _subsource_position = list(subsource_position.copy().map(lambda x: geometry.Point(*x[0])))
+    _subsource_position = list(subsource_position_resolution.copy().map(lambda x: geometry.Point(*x[0])))
     _receiver_position = [ geometry.Point(*receiver_position.copy().samples().peek()) ]
-    #_subsource_position = [geometry.Point(*src) for src in subsource_position[::resolution]]# subsource.position[::n]
-    #_receiver_position = [geometry.Point(*receiver_position[0])]
+
     mirrors = _ism_get_mirror_sources(source=_receiver_position,
                                       receiver=_subsource_position,
                                       walls=walls,
                                       order_threshold=settings['reflections']['order_threshold'],
                                       mirrors_threshold=settings['reflections']['mirrors_threshold'])
+
+
 
     for mirror in mirrors:
         # To determine the directivity correction we need to know the orientation from mirror receiver to source.
@@ -578,16 +584,16 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
         #strength = BlockStream(mirror.strength, resolution)
 
         # Single values as function of time indicating whether the source was effective or not.
-        effective = Stream(mirror.effective).repeat_each(resolution).blocks(resolution)
+        effective = Stream(iter(mirror.effective)).repeat_each(resolution).blocks(resolution)
         # Spectra as function of time
-        strength = Stream(mirror.strength).repeat_each(resolution).blocks(resolution)
+        strength = Stream(iter(mirror.strength)).repeat_each(resolution).blocks(resolution)
 
         # Signal after applying mirror source strength and effectiveness
         signal = auraliser.realtime.apply_reflection_strength(signal, nblock, strength, effective, settings['reflections']['ntaps'], settings['reflections']['force_hard'])
         #signal = _apply_mirror_source_strength(signal, effective, strength, settings['reflections']['force_hard'], settings['reflections']['ntaps'])
 
         mirror_receiver_position = constant(mirror.position)
-        yield Mirror(subsource_position.blocks(nblock), mirror_receiver_position.blocks(nblock), signal.blocks(nblock))
+        yield Mirror(subsource_position.copy().blocks(nblock), mirror_receiver_position.blocks(nblock), signal.blocks(nblock))
 
 
 
