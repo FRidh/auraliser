@@ -568,8 +568,6 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
                                       order_threshold=settings['reflections']['order_threshold'],
                                       mirrors_threshold=settings['reflections']['mirrors_threshold'])
 
-
-
     for mirror in mirrors:
         # To determine the directivity correction we need to know the orientation from mirror receiver to source.
         # What matters however is not the position of the mirror, but the position of the first order mirror.
@@ -594,56 +592,6 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
 
         mirror_receiver_position = constant(mirror.position)
         yield Mirror(subsource_position.copy().blocks(nblock), mirror_receiver_position.blocks(nblock), signal.blocks(nblock))
-
-
-
-#def _apply_source_effects(mirror, subsource, settings, samples):
-    #"""Apply source effects to source.
-
-    #Includes:
-        #- Directivity of source
-        #- Effectiveness and strength of mirror
-
-    #"""
-    #logging.info("_apply_source_effects: Applying source effects...")
-
-    #resolution = settings['reflections']['update_resolution']
-    #nblock = settings['reflections']['update_resolution']
-    #ntaps = settings['reflections']['taps']
-
-    ## Emission signal with directivity.
-    #orientation = unit_vector(np.array(position_for_directivity(mirror)) - subsource.position) # Orientation from receiver to source.
-    #signal = subsource.signal( orientation ) # Signal for given orientation.
-
-    #del orientation
-
-    #if mirror.effective is not None:
-        ##signal = map(operator.mul, signal, iter(mirror.effective))
-        #signal *= np.repeat(mirror.effective, resolution, axis=0)[0:samples]
-        #del mirror.effective
-
-    ## Apply correct source strength due to reflections.
-    #if not settings['reflections']['force_hard'] and not np.all(mirror.strength == 1.0): # Save computations, for direct source there is no need.
-
-        #logging.info("_apply_source_effects: Soft ground.")
-
-        ## Convert single-sided source spectrum to impulse response
-        ##ir = map(lambda x: auraliser.impulse_response(x, ntaps=ntaps), iter(mirror.strength))
-        ## And convolve
-        ##signal = Signal.fromiter(convolve(signal=signal, nblock=nblock, ir=ir), fs)
-
-        #signal = convolve(signal, np.repeat(  (auraliser.propagation.ir_reflection(mirror.strength, settings['reflections']['taps'])), resolution, axis=0)[0:samples].T)[0:samples]
-
-        ## We cannot yet delete the strength of the object since a child mirror source might need it.
-        ## Same for the position, as the child needs to know it for the directivity.
-        ## But, we can at least delete the strength of this mother source. (also not true?!)
-        ##del mirror.strength
-        ##del mirror.mother.strength, mirror.mother.effective, mirror.mother.distance
-        ##print(signal)
-    #else:
-        #logging.info("_apply_source_effects: Hard ground.")
-    #del mirror
-    #return signal
 
 
 
