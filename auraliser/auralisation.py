@@ -300,17 +300,17 @@ class Auraliser(object):
         name = name if isinstance(name, str) else name.name
         for obj in self._objects:
             if name == obj.name:
-                log.debug('Removing object with name "{}"'.format(name))
+                logger.debug('Removing object with name "{}"'.format(name))
                 self._objects.remove(obj)
 
     def remove_objects(self):
         """Delete all objects from model."""
-        log.debug('Removing all objects from model.')
+        logger.debug('Removing all objects from model.')
         del self._objects[:]
 
     def _add_object(self, name, model, *args, **kwargs):
         """Add object to model."""
-        log.debug('Adding object with name "{}" to model.'.format(name))
+        logger.debug('Adding object with name "{}" to model.'.format(name))
         obj = model(weakref.proxy(self), name, *args, **kwargs)   # Add hidden hard reference
         self._objects.append(obj)
         return self.get_object(obj.name)
@@ -408,7 +408,7 @@ class Auraliser(object):
 
         #.. note:: Mirror receivers are calculated instead of mirror sources.
         #"""
-        #log.info("_get_mirror_sources_from_ism: Determining mirrors sources.")
+        #logger.info("_get_mirror_sources_from_ism: Determining mirrors sources.")
         #model = ism.Model(self.geometry.walls, source=receiver, receiver=source, max_order=self.settings['reflections']['order_threshold'])
         #mirrors = model.determine(strongest=self.settings['reflections']['mirrors_threshold'])
         #yield from mirrors
@@ -421,7 +421,7 @@ class Auraliser(object):
         """
 
         # Generate the emission signals.
-        log.info("_auralise_subsource: Generating subsource emission signals.")
+        logger.info("_auralise_subsource: Generating subsource emission signals.")
         subsource.generate_signals()
 
         nblock = settings['nblock']
@@ -431,15 +431,15 @@ class Auraliser(object):
         receiver_position = Stream(iter(receiver.position)).blocks(nblock)
 
         # Determine mirrors
-        log.info("_auralise_subsource: Determine mirrors.")
+        logger.info("_auralise_subsource: Determine mirrors.")
         if settings['reflections']['include'] and len(geometry.walls) > 0: # Are reflections possible?
-            log.info("_auralise_subsource: Searching for mirrors. Reflections are enabled, and we have walls.")
+            logger.info("_auralise_subsource: Searching for mirrors. Reflections are enabled, and we have walls.")
             #resolution = settings['reflections']['update_resolution']
 
             mirrors = _ism_mirrors(subsource_position, receiver_position, subsource.signal, geometry.walls, settings)
 
         else: # No walls, so no reflections. Therefore the only source is the real source.
-            log.info("_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
+            logger.info("_auralise_subsource: Not searching for mirror sources. Either reflections are disabled or there are no walls.")
             #emission = subsource.signal( unit_vector(receiver.position - subsource.position)) # Use non-Stream here for now...
             emission = subsource.signal(unit_vector_stream(receiver_position.copy() - subsource_position.copy()))
             # Final sources
@@ -458,13 +458,13 @@ class Auraliser(object):
     def _auralise_source(source, receiver, settings, geometry, atmosphere):
         """Synthesize the signal at `receiver` due to `source`. This includes all subsources and respective mirror sources.
         """
-        log.info("_auralise_source: Auralising source {}".format(source.name))
+        logger.info("_auralise_source: Auralising source {}".format(source.name))
 
         for subsource in source.subsources:
             signals_and_orientations = Auraliser._auralise_subsource(subsource, receiver, settings, geometry, atmosphere)
             yield from signals_and_orientations
 
-        log.info("_auralise_source: Finished auralising source {}".format(source.name))
+        logger.info("_auralise_source: Finished auralising source {}".format(source.name))
 
     def auralise(self, receiver, sources=None):
         """Synthesise the signal due to one or multiple sources at `receiver`. All subsources are included.
@@ -474,9 +474,9 @@ class Auraliser(object):
 
         """
         receiver = self.get_object(receiver)
-        log.info("auralise: Auralising at {}".format(receiver.name))
+        logger.info("auralise: Auralising at {}".format(receiver.name))
         if self.can_auralise():
-            log.info("auralise: Can auralise.")
+            logger.info("auralise: Can auralise.")
 
         sources = sources if sources else self.sources
         sources = (self.get_object(source) for source in sources)
@@ -511,10 +511,10 @@ def unit_vector_stream(stream):
         ##emission = emission * effective
     ###if force_hard or np.all(strength == 1.0):
     ##if force_hard:
-        ##log.info("_apply_source_effects: Hard ground.")
+        ##logger.info("_apply_source_effects: Hard ground.")
     ##else:
         ### Apply mirror source strength. Only necessary when we have a soft surface.
-        ##log.info("_apply_source_effects: Soft ground.")
+        ##logger.info("_apply_source_effects: Soft ground.")
         ###impulse_responses = map(auraliser.propagation.impulse_response, strength)
         ##impulse_responses = strength.map(auraliser.propagation.impulse_response)
         ##emission = convolve(emission, impulse_responses, nblock)
@@ -534,7 +534,7 @@ def _ism_get_mirror_sources(source, receiver, walls, order_threshold, mirrors_th
 
     .. note:: Mirror receivers are calculated instead of mirror sources.
     """
-    log.info("_ism_get_mirror_sources: Determining mirror sources.")
+    logger.info("_ism_get_mirror_sources: Determining mirror sources.")
     model = ism.Model(walls=walls, source=source, receiver=receiver, max_order=order_threshold)
     mirrors = model.determine(strongest=mirrors_threshold)
     yield from mirrors
@@ -551,7 +551,7 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
     :type settings: :func:`dict`
     :returns: Yields mirror sources with emission signals.
     """
-    log.info("_ism_mirrors: Determining mirror sources and their emissions.")
+    logger.info("_ism_mirrors: Determining mirror sources and their emissions.")
     resolution = settings['reflections']['nhop']
     nblock = settings['nblock']
 
@@ -620,7 +620,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
         - Atmospheric turbulence.
         - Atmospheric attenuation.
     """
-    log.info("_apply_propagation_effects: Auralising mirror")
+    logger.info("_apply_propagation_effects: Auralising mirror")
 
     nblock = settings['nblock']
 
@@ -650,19 +650,19 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
 
     # Apply spherical spreading.
     if settings['spreading']['include']:
-        log.info("_apply_propagation_effects: Applying spherical spreading.")
+        logger.info("_apply_propagation_effects: Applying spherical spreading.")
         signal = auraliser.realtime.apply_spherical_spreading(signal.blocks(nblock), distance.copy().blocks(nblock))
 
     # Apply delay due to spreading (Doppler shift)
     if settings['doppler']['include'] and settings['doppler']['frequency']:
-        log.info("_apply_propagation_effects: Applying Doppler frequency shift.")
+        logger.info("_apply_propagation_effects: Applying Doppler frequency shift.")
         signal = auraliser.realtime.apply_doppler(signal=signal,
                                                   delay=distance.copy()/atmosphere.soundspeed,
                                                   fs=fs)
 
     # Apply atmospheric turbulence
     if settings['turbulence']['include']:
-        log.info("_apply_propagation_effects: Applying turbulence.")
+        logger.info("_apply_propagation_effects: Applying turbulence.")
 
         # We first need to compute the transverse speed
         # We also only want to have a single value per block.
@@ -702,7 +702,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
 
     # Apply atmospheric absorption.
     if settings['atmospheric_absorption']['include']:
-        log.info("_apply_propagation_effects: Applying atmospheric absorption.")
+        logger.info("_apply_propagation_effects: Applying atmospheric absorption.")
 
         signal = auraliser.realtime.apply_atmospheric_attenuation(
             signal=signal,
