@@ -8,6 +8,8 @@ import logging
 from acoustics._signal import Signal
 from acoustics.atmosphere import Atmosphere
 
+log = logging.getLogger(__name__)
+
 class Reverter(object):
     """Class for calculating back from receiver to source.
     """
@@ -44,12 +46,12 @@ class Reverter(object):
         
         
         if self.settings['spreading']['include']:
-            logging.info("revert: Unapply spherical spreading.")
+            log.info("revert: Unapply spherical spreading.")
             signal = unapply_spherical_spreading(signal, distance)
         
         # Atmospheric attenuation when discarding the reflected path
         if not self.settings['reflections']['include'] and self.settings['atmospheric_absorption']['include']:
-            logging.info("revert: Unapply atmospheric absorption.")
+            log.info("revert: Unapply atmospheric absorption.")
             signal = unapply_atmospheric_absorption(signal,
                                                     fs,
                                                     self.atmosphere,
@@ -64,17 +66,17 @@ class Reverter(object):
 
 
         if self.settings['doppler']['include'] and self.settings['doppler']['frequency']:
-            logging.info("revert: Unapply Doppler frequency shift.")
+            log.info("revert: Unapply Doppler frequency shift.")
             delay = distance / self.atmosphere.soundspeed
             signal = unapply_doppler(signal, 
-                                     delay, 
+                                     delay,
                                      fs,
                                      method=self.settings['doppler']['interpolation'],
                                      kernelsize=self.settings['doppler']['kernelsize']
                                      )
             # 
             if self.settings['doppler']['purge_zeros']:
-                logging.info("revert: Purge zeros due to initial delay.")
+                log.info("revert: Purge zeros due to initial delay.")
                 delay = int(distance[-1]/self.atmosphere.soundspeed * fs)
                 signal = signal[0:len(signal)-delay]
         
