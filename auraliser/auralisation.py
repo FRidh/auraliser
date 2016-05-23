@@ -550,7 +550,7 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
     :returns: Yields mirror sources with emission signals.
     """
     logging.info("_ism_mirrors: Determining mirror sources and their emissions.")
-    resolution = settings['reflections']['update_resolution']
+    resolution = settings['reflections']['nhop']
     nblock = settings['nblock']
 
 
@@ -760,7 +760,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
             distance=distance.copy(),
             nhop=nblock,
             atmosphere=atmosphere,
-            ntaps=settings['atmospheric_absorption']['taps'],
+            ntaps=settings['atmospheric_absorption']['ntaps'],
             sign=-1,
             dtype='float64',
             )
@@ -1094,9 +1094,9 @@ _DEFAULT_SETTINGS = {
         'include'           :   True,   # Include reflections
         'mirrors_threshold' :   2,      # Maximum amount of mirrors to include
         'order_threshold'   :   3,      # Maximum order of reflections
-        'update_resolution' :   8192,    # Update effectiveness every N samples.
-        'ntaps'              :   256,     # Amount of filter taps for ifft mirror strength.
-        'force_hard'        :   True,  # Force hard reflections.
+        'nhop'              :   4096,   # Update effectiveness every N samples.
+        'ntaps'             :   4096,   # Amount of filter taps for ifft mirror strength.
+        'force_hard'        :   True,   # Force hard reflections.
         },
     'doppler':{
         'include'           :   True,   # Include Doppler shift
@@ -1111,7 +1111,7 @@ _DEFAULT_SETTINGS = {
         },
     'atmospheric_absorption':{
         'include'           :   True,   # Include atmospheric absorption
-        'taps'              :   256,    # Amount of filter taps to use for ifft
+        'ntaps'              :   4096,    # Amount of filter taps to use for ifft
         #'unique_distances'  :   100,    # Calculate the atmospheric for N amount unique distances.
         },
     'turbulence':{
@@ -1122,20 +1122,12 @@ _DEFAULT_SETTINGS = {
         'saturation'        :   True,  # Include log-amplitude saturation
         'amplitude'         :   True,   # Amplitude modulations
         'phase'             :   True,   # Phase modulations
-        'spatial_separation':   True,
         'seed'              :   100,   # By setting this value to an integer, the 'random' values will be similar for each auralisation.
         #'state'             :   np.random.RandomState(), # Use same state for all propagation paths
         'ntaps_corr'        :   8192,
-        'ntaps_spectra'     :   128,
+        'ntaps_spectra'     :   512,
         'nhop'              :   128,
-        'covariance'        :   'gaussian',
         'window'            :   None,
-        #'force_constant_distance' : False, # Force constant distance. False, or reducing function.
-        'vonkarman' : {
-            'steps'         :   10,
-            'initial'       :   0.001,
-            'variance_windspeed':   0.03,
-            }
         },
     'plot':{
         'general':{
@@ -1165,11 +1157,7 @@ _DEFAULT_SETTINGS = {
             'alpha'         :   0.5,    # Transparancy of walls.
             'normal'        :   True,   # Show normal vectors.
             'color'         :   'b',
-            }
-
-        },
-    'directivity': {
-        'update_resolution' :   100,    # Sample directivity every N samples. Needed for spherical harmonics.
+            },
         },
     }
 """
