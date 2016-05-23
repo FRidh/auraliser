@@ -1,6 +1,15 @@
 import numpy as np
 from functools import singledispatch
 import numba
+import logging
+
+def create_logger(name):
+    logger = logging.getLogger(name)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter(logging.BASIC_FORMAT))
+    logger.addHandler(handler)
+    return logger
+
 
 def db_to_lin(db):
     """

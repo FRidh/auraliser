@@ -8,7 +8,8 @@ import logging
 from acoustics._signal import Signal
 from acoustics.atmosphere import Atmosphere
 
-log = logging.getLogger(__name__)
+import auraliser.tools
+logger = auraliser.tools.create_logger(__name__)
 
 class Reverter(object):
     """Class for calculating back from receiver to source.

@@ -21,7 +21,6 @@ import collections
 import geometry
 import ism
 import itertools
-import logging
 import math
 import numpy as np
 import weakref
@@ -43,7 +42,8 @@ from streaming.signal import constant
 import cytoolz
 import copy
 
-log = logging.getLogger(__name__)
+import auraliser.tools
+logger = auraliser.tools.create_logger(__name__)
 
 @dispatch(object, object)
 def unequality(a, b):
