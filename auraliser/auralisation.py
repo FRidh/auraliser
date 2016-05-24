@@ -1051,7 +1051,7 @@ _DEFAULT_SETTINGS = {
     'doppler':{
         'include'           :   True,   # Include Doppler shift
         'frequency'         :   True,   # Include the frequency shift.
-        'amplitude'         :   True,   # Include the change in intensity.
+        'amplitude'         :   True,   # Include the change in intensity due to convective amplification
         'purge_zeros'       :   False,  # Purge the (initial) zeros due to the delay in arrival.
         'interpolation'     :   'linear',   # Lanczos interpolation
         'kernelsize'        :   10,
