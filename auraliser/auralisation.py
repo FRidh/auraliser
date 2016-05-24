@@ -1046,7 +1046,7 @@ _DEFAULT_SETTINGS = {
         'order_threshold'   :   3,      # Maximum order of reflections
         'nhop'              :   4096,   # Update effectiveness every N samples.
         'ntaps'             :   4096,   # Amount of filter taps for ifft mirror strength.
-        'force_hard'        :   True,   # Force hard reflections.
+        'force_hard'        :   False,   # Force hard reflections.
         },
     'doppler':{
         'include'           :   True,   # Include Doppler shift

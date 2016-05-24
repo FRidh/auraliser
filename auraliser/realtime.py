@@ -7,6 +7,7 @@ from streaming.stream import Stream, BlockStream
 from streaming.signal import *
 import streaming.signal
 import logging
+from acoustics.signal import impulse_response_real_even
 
 
 def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, sign=-1, dtype='float64', distance_reducer=np.mean):
@@ -55,8 +56,8 @@ def apply_reflection_strength(emission, nblock, spectra, effective, ntaps, force
         logging.info("_apply_source_effects: Hard ground.")
     else:
         logging.info("_apply_source_effects: Soft ground.")
-        impulse_responses = Stream(impulse_response(s, ntaps) for s in spectra)
-        emission = convolve_overlap_add(emission.blocks(nblock), impulse_responses, nblock, ntaps)
+        impulse_responses = Stream(impulse_response_real_even(s, ntaps) for s in spectra)
+        emission = convolve_overlap_save(emission.blocks(nblock), impulse_responses, nblock, ntaps)
         # Filter has a delay we need to correct for.
         #emission = emission.samples().drop(int(ntaps//2))
     return emission
