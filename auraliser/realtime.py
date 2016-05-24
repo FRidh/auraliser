@@ -9,6 +9,8 @@ import streaming.signal
 import logging
 from acoustics.signal import impulse_response_real_even
 
+import auraliser.tools
+logger = auraliser.tools.create_logger(__name__)
 
 def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, sign=-1, dtype='float64', distance_reducer=np.mean):
     """Apply atmospheric attenuation to signal.
@@ -35,7 +37,7 @@ def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps,
     return signal
 
 
-def apply_reflection_strength(emission, nblock, spectra, effective, ntaps, force_hard):
+def apply_reflection_strength(emission, nhop, spectra, effective, ntaps, force_hard):
     """Apply mirror source strength.
 
     :param signal: Signal.
@@ -50,16 +52,22 @@ def apply_reflection_strength(emission, nblock, spectra, effective, ntaps, force
 
     """
     if effective is not None:
-        emission = emission * effective
+        # We have an effectiveness value for each hop (which is a block of samples)
+        emission = BlockStream(map(lambda x,y: x *y, emission.blocks(nhop), effective), nblock=nhop)
 
     if force_hard:
-        logging.info("_apply_source_effects: Hard ground.")
+        logger.info("apply_reflection_strength: Hard ground.")
     else:
-        logging.info("_apply_source_effects: Soft ground.")
+        logger.info("apply_reflection_strength: Soft ground.")
         impulse_responses = Stream(impulse_response_real_even(s, ntaps) for s in spectra)
-        emission = convolve_overlap_save(emission.blocks(nblock), impulse_responses, nblock, ntaps)
+        for ir in impulse_responses.copy().take(10):
+            print(ir)
+
+        #for ir in impulse_responses.copy():
+            #print(ir)
+        emission = convolve_overlap_save(emission, impulse_responses, nhop, ntaps)
         # Filter has a delay we need to correct for.
-        #emission = emission.samples().drop(int(ntaps//2))
+        emission = emission.samples().drop(int(ntaps//2))
     return emission
 
 

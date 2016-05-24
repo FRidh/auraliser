@@ -577,20 +577,19 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
         receiver_position_directivity = position_for_directivity(mirror)
         # Emission given a vector pointing from receiver to source.
         orientation_directivity = unit_vector_stream(receiver_position_directivity - subsource_position.copy())
-        signal = emission(orientation_directivity).blocks(resolution)
+        signal = emission(orientation_directivity)
+        # We now have an emission signal.
 
-        # Apply correct directivity.
-        #effective = BlockStream(mirror.effective, resolution)
-        #strength = BlockStream(mirror.strength, resolution)
+        # Now we need to effectiveness and strength.
+        # These values are determined at a certain resolution
 
-        # Single values as function of time indicating whether the source was effective or not.
-        effective = Stream(iter(mirror.effective)).repeat_each(resolution).blocks(resolution)
-        # Spectra as function of time
-        strength = Stream(iter(mirror.strength)).repeat_each(resolution).blocks(resolution)
+        # Single value per hop indicating whether the source was effective or not.
+        effective = Stream(iter(mirror.effective))
+        # Spectrum per hop.
+        strength = Stream(iter(mirror.strength))
 
         # Signal after applying mirror source strength and effectiveness
-        signal = auraliser.realtime.apply_reflection_strength(signal, nblock, strength, effective, settings['reflections']['ntaps'], settings['reflections']['force_hard'])
-        #signal = _apply_mirror_source_strength(signal, effective, strength, settings['reflections']['force_hard'], settings['reflections']['ntaps'])
+        signal = auraliser.realtime.apply_reflection_strength(signal, resolution, strength, effective, settings['reflections']['ntaps'], settings['reflections']['force_hard'])
 
         mirror_receiver_position = constant(mirror.position)
         yield Mirror(subsource_position.copy().blocks(nblock), mirror_receiver_position.blocks(nblock), signal.blocks(nblock))
@@ -640,14 +639,6 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
     # Source speed
     speed = velocity.copy().map(lambda x: np.linalg.norm(x, axis=-1))
 
-    # Unit vector pointing from receiver to source.
-    #orientation_sr = distance_vector.copy() / distance.copy()
-
-    #print("Distance: {}".format(distance))
-    #print("Source:{}".format(source.peek()))
-    #print("Receiver: {}".format(receiver.peek()))
-
-
     # Apply spherical spreading.
     if settings['spreading']['include']:
         logger.info("_apply_propagation_effects: Applying spherical spreading.")
@@ -673,10 +664,6 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
         _orientation = unit_vector_stream(Stream(distance_vector.copy().blocks(nhop).map(cytoolz.first)))
         #_orientation = Stream(_orientation_sr.copy().blocks(nhop).map(lambda x: x[0]))
         _transverse_speed = Stream(iter(map(auraliser.realtime.transverse_speed, _velocity, _orientation)))
-        #print(next(_distance))
-        #print(next(_velocity))
-        #print(next(_orientation))
-        #print(next(_transverse_speed))
 
         state = np.random.RandomState(seed=settings['turbulence']['seed'])
 
