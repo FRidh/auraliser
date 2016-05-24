@@ -60,11 +60,6 @@ def apply_reflection_strength(emission, nhop, spectra, effective, ntaps, force_h
     else:
         logger.info("apply_reflection_strength: Soft ground.")
         impulse_responses = Stream(impulse_response_real_even(s, ntaps) for s in spectra)
-        for ir in impulse_responses.copy().take(10):
-            print(ir)
-
-        #for ir in impulse_responses.copy():
-            #print(ir)
         emission = convolve_overlap_save(emission, impulse_responses, nhop, ntaps)
         # Filter has a delay we need to correct for.
         emission = emission.samples().drop(int(ntaps//2))
