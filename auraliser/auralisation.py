@@ -695,7 +695,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
             signal=signal,
             fs=fs,
             distance=distance.copy(),
-            nhop=nblock,
+            nhop=settings['atmospheric_absorption']['nhop'],
             atmosphere=atmosphere,
             ntaps=settings['atmospheric_absorption']['ntaps'],
             sign=-1,
@@ -1031,7 +1031,7 @@ _DEFAULT_SETTINGS = {
         'include'           :   True,   # Include reflections
         'mirrors_threshold' :   2,      # Maximum amount of mirrors to include
         'order_threshold'   :   3,      # Maximum order of reflections
-        'nhop'              :   4096,   # Update effectiveness every N samples.
+        'nhop'              :   256,   # Update effectiveness every N samples.
         'ntaps'             :   4096,   # Amount of filter taps for ifft mirror strength.
         'force_hard'        :   False,   # Force hard reflections.
         },
@@ -1047,6 +1047,7 @@ _DEFAULT_SETTINGS = {
         'include'           :   True,   # Include spherical spreading
         },
     'atmospheric_absorption':{
+        'nhop'              :   256,
         'include'           :   True,   # Include atmospheric absorption
         'ntaps'              :   4096,    # Amount of filter taps to use for ifft
         #'unique_distances'  :   100,    # Calculate the atmospheric for N amount unique distances.
