@@ -89,7 +89,9 @@ def apply_doppler(signal, delay, fs, initial_value=0.0, inverse=False):
     :rtype: :class:`streaming.Stream`
 
     """
-    return vdl(signal, times(1./fs), -delay, initial_value=initial_value)
+    if inverse:
+        delay = -delay
+    return vdl(signal, times(1./fs), delay, initial_value=initial_value)
 
 def apply_spherical_spreading(signal, distance, inverse=False):#, nblock):
     """Apply spherical spreading.
