@@ -79,7 +79,7 @@ def apply_reflection_strength(emission, nhop, spectra, effective, ntaps, force_h
     #signal = convolve(signal=signal, impulse_responses=ir, nblock=nblock)
 
 
-def apply_doppler(signal, delay, fs, initial_value=0.0):
+def apply_doppler(signal, delay, fs, initial_value=0.0, inverse=False):
     """Apply Doppler shift.
 
     :param signal: Signal before Doppler shift.
@@ -89,8 +89,7 @@ def apply_doppler(signal, delay, fs, initial_value=0.0):
     :rtype: :class:`streaming.Stream`
 
     """
-    np.savetxt("/tmp/delay.csv", delay.copy().toarray())
-    return vdl(signal, times(1./fs), delay, initial_value=initial_value)
+    return vdl(signal, times(1./fs), -delay, initial_value=initial_value)
 
 def apply_spherical_spreading(signal, distance, inverse=False):#, nblock):
     """Apply spherical spreading.

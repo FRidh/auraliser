@@ -100,7 +100,8 @@ class Reverter(object):
                                      #)
             signal = auraliser.realtime.apply_doppler(signal=signal,
                                                       delay=distance.copy()/atmosphere.soundspeed,
-                                                      fs=fs)
+                                                      fs=fs,
+                                                      inverse=True)
             # 
             #if settings['doppler']['purge_zeros']:
                 #logger.info("revert: Purge zeros due to initial delay.")
