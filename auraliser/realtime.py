@@ -92,7 +92,7 @@ def apply_doppler(signal, delay, fs, initial_value=0.0):
     np.savetxt("/tmp/delay.csv", delay.copy().toarray())
     return vdl(signal, times(1./fs), delay, initial_value=initial_value)
 
-def apply_spherical_spreading(signal, distance):#, nblock):
+def apply_spherical_spreading(signal, distance, inverse=False):#, nblock):
     """Apply spherical spreading.
 
     :param signal. Signal. Iterable.
@@ -100,8 +100,10 @@ def apply_spherical_spreading(signal, distance):#, nblock):
     :param nblock: Amount of samples in block.
 
     """
-    return signal / distance
-
+    if inverse:
+        return signal * distance
+    else:
+        return signal / distance
 
 
 #def apply_turbulence(signal, fs, fraction, order, spatial_separation, distance, soundspeed,

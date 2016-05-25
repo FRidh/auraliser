@@ -58,7 +58,9 @@ class Reverter(object):
         if settings['spreading']['include']:
             logger.info("revert: Unapply spherical spreading.")
             #signal = unapply_spherical_spreading(signal, distance)
-            signal = auraliser.realtime.apply_spherical_spreading(signal.blocks(nblock), distance.copy().blocks(nblock))
+            signal = auraliser.realtime.apply_spherical_spreading(signal.blocks(nblock),
+                                                                  distance.copy().blocks(nblock),
+                                                                  inverse=True)
         
         # Atmospheric attenuation when discarding the reflected path
         if settings['atmospheric_absorption']['include']:
@@ -71,7 +73,7 @@ class Reverter(object):
                 nhop=settings['atmospheric_absorption']['nhop'],
                 atmosphere=atmosphere,
                 ntaps=settings['atmospheric_absorption']['ntaps'],
-            inverse=True,
+                inverse=True,
             )
 
             #signal = unapply_atmospheric_absorption(signal,
