@@ -90,7 +90,7 @@ def apply_doppler(signal, delay, fs, initial_value=0.0, inverse=False):
 
     """
     if inverse:
-        delay = -delay
+        delay = delay * -1 # Unary operators are not yet implemented in Stream
     return vdl(signal, times(1./fs), delay, initial_value=initial_value)
 
 def apply_spherical_spreading(signal, distance, inverse=False):#, nblock):
