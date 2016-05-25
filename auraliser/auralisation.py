@@ -704,6 +704,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
     # Force zeros until first real sample arrives. Should only be done when the time delay (Doppler) is applied.
     # But force to zero why...? The responsible function should make it zero.
     if settings['doppler']['include'] and settings['doppler']['frequency'] and settings['doppler']['purge_zeros']:
+        logger.info("_apply_propagation_effects: Purging zeros.")
         initial_distance = distance.copy().samples().peek()
         # Initial delay in samples
         initial_delay = int(math.ceil(initial_distance/atmosphere.soundspeed * fs))
