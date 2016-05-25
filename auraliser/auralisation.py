@@ -698,7 +698,7 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
             nhop=settings['atmospheric_absorption']['nhop'],
             atmosphere=atmosphere,
             ntaps=settings['atmospheric_absorption']['ntaps'],
-            sign=-1,
+            inverse=False,
             dtype='float64',
             )
 

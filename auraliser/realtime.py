@@ -12,7 +12,7 @@ from acoustics.signal import impulse_response_real_even
 import auraliser.tools
 logger = auraliser.tools.create_logger(__name__)
 
-def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, sign=-1, dtype='float64', distance_reducer=np.mean):
+def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, inverse=False, dtype='float64', distance_reducer=np.mean):
     """Apply atmospheric attenuation to signal.
 
     :param distance: Iterable with distances.
@@ -31,7 +31,7 @@ def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps,
     """
     # Partition `distance` into blocks, and reduce with `distance_reducer`.
     distance = distance.blocks(nhop).map(distance_reducer)
-    ir = Stream(atmosphere.impulse_response(d, fs, ntaps=ntaps, sign=sign) for d in distance)
+    ir = Stream(atmosphere.impulse_response(d, fs, ntaps=ntaps, inverse=inverse) for d in distance)
     signal = convolve_overlap_save(signal, ir, nhop, ntaps)
     signal = signal.samples().drop(int(ntaps//2)) # Linear phase, correct for group delay caused by FIR filter.
     return signal
