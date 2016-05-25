@@ -11,6 +11,9 @@ from acoustics.atmosphere import Atmosphere
 import auraliser.tools
 logger = auraliser.tools.create_logger(__name__)
 
+import auraliser
+from streaming import Stream
+
 class Reverter(object):
     """Class for calculating back from receiver to source.
     """
@@ -44,22 +47,37 @@ class Reverter(object):
         fs = signal.fs
         
         distance = np.linalg.norm(self.source - self.receiver, axis=1)
-        
+        nblock = settings['nblock']
+
+        distance = Stream(iter(distance)).blocks(nblock)
+        signal = Stream(iter(signal)).blocks(nblock)
         
         if self.settings['spreading']['include']:
             logger.info("revert: Unapply spherical spreading.")
-            signal = unapply_spherical_spreading(signal, distance)
+            #signal = unapply_spherical_spreading(signal, distance)
+            signal = auraliser.realtime.apply_spherical_spreading(signal.blocks(nblock), distance.copy().blocks(nblock))
         
         # Atmospheric attenuation when discarding the reflected path
-        if not self.settings['reflections']['include'] and self.settings['atmospheric_absorption']['include']:
+        if self.settings['atmospheric_absorption']['include']:
             logger.info("revert: Unapply atmospheric absorption.")
-            signal = unapply_atmospheric_absorption(signal,
-                                                    fs,
-                                                    self.atmosphere,
-                                                    distance,
-                                                    n_blocks=self.settings['atmospheric_absorption']['taps'],
-                                                    n_distances=self.settings['atmospheric_absorption']['unique_distances']
-                                                    )[0:samples]
+
+            signal = auraliser.realtime.apply_atmospheric_attenuation(
+                signal=signal,
+                fs=fs,
+                distance=distance.copy(),
+                nhop=settings['atmospheric_absorption']['nhop'],
+                atmosphere=atmosphere,
+                ntaps=settings['atmospheric_absorption']['ntaps'],
+            inverse=True,
+            )
+
+            #signal = unapply_atmospheric_absorption(signal,
+                                                    #fs,
+                                                    #self.atmosphere,
+                                                    #distance,
+                                                    #n_blocks=self.settings['atmospheric_absorption']['taps'],
+                                                    #n_distances=self.settings['atmospheric_absorption']['unique_distances']
+                                                    #)[0:samples]
         
         # Correction for atmospheric attenuation and reflected path
         if self.settings['reflections']['include'] and self.settings['atmospheric_absorption']['include']:
@@ -68,21 +86,32 @@ class Reverter(object):
 
         if self.settings['doppler']['include'] and self.settings['doppler']['frequency']:
             logger.info("revert: Unapply Doppler frequency shift.")
-            delay = distance / self.atmosphere.soundspeed
-            signal = unapply_doppler(signal, 
-                                     delay,
-                                     fs,
-                                     method=self.settings['doppler']['interpolation'],
-                                     kernelsize=self.settings['doppler']['kernelsize']
-                                     )
+            #delay = distance / self.atmosphere.soundspeed
+            #signal = unapply_doppler(signal,
+                                     #delay,
+                                     #fs,
+                                     #method=self.settings['doppler']['interpolation'],
+                                     #kernelsize=self.settings['doppler']['kernelsize']
+                                     #)
+            signal = auraliser.realtime.apply_doppler(signal=signal,
+                                                      delay=distance.copy()/atmosphere.soundspeed,
+                                                      fs=fs)
             # 
-            if self.settings['doppler']['purge_zeros']:
-                logger.info("revert: Purge zeros due to initial delay.")
-                delay = int(distance[-1]/self.atmosphere.soundspeed * fs)
-                signal = signal[0:len(signal)-delay]
-        
-        
-        return Signal(signal, fs)
+            #if self.settings['doppler']['purge_zeros']:
+                #logger.info("revert: Purge zeros due to initial delay.")
+                #delay = int(distance[-1]/self.atmosphere.soundspeed * fs)
+                #signal = signal[0:len(signal)-delay]
+
+        if settings['doppler']['include'] and settings['doppler']['frequency'] and settings['doppler']['purge_zeros']:
+            initial_distance = distance.copy().samples().peek()
+            # Initial delay in samples
+            initial_delay = int(math.ceil(initial_distance/atmosphere.soundspeed * fs))
+            signal = signal.samples().drop(initial_delay)
+            del initial_distance, initial_delay
+
+        del distance
+
+        return Signal(signal.toarray(), fs)
 
 
     def initial_delay(signal):
