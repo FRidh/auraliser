@@ -45,6 +45,7 @@ class Reverter(object):
         Calculate back from receiver signal to source signal.
         """
         settings = self.settings
+        atmosphere = self.atmosphere
         samples = len(signal)
         fs = signal.fs
         
