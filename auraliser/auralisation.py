@@ -699,7 +699,6 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
             atmosphere=atmosphere,
             ntaps=settings['atmospheric_absorption']['ntaps'],
             inverse=False,
-            dtype='float64',
             )
 
     # Force zeros until first real sample arrives. Should only be done when the time delay (Doppler) is applied.

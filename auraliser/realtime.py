@@ -12,7 +12,7 @@ from acoustics.signal import impulse_response_real_even
 import auraliser.tools
 logger = auraliser.tools.create_logger(__name__)
 
-def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, inverse=False, dtype='float64', distance_reducer=np.mean):
+def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, inverse=False, distance_reducer=np.mean):
     """Apply atmospheric attenuation to signal.
 
     :param distance: Iterable with distances.
