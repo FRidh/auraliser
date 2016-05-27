@@ -130,12 +130,13 @@ def recursive_mapping_update(d, u):
     :param u: Source mapping.
 
     """
-    for k, v in u.items():
-        if isinstance(v, collections.Mapping):
-            r = recursive_mapping_update(d.get(k, {}), v)
-            d[k] = r
-        else:
-            d[k] = u[k]
+    if u is not None:
+        for k, v in u.items():
+            if isinstance(v, collections.Mapping):
+                r = recursive_mapping_update(d.get(k, {}), v)
+                d[k] = r
+            else:
+                d[k] = u[k]
     return d
 
 
