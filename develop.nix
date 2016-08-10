@@ -11,5 +11,5 @@ in pythonPackages.buildPythonPackage {
   name = "auraliser";
   src = ./.;
 
-  propagatedBuildInputs = dependencies ++ mypkgs.base;
+  propagatedBuildInputs = dependencies ++ mypkgs.common-python-packages;
 }
