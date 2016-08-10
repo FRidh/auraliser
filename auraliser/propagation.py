@@ -17,7 +17,7 @@ except ImportError:
 finally:
     #from scipy.signal import fftconvolve
     from scipy.special import erf
-    from ._fftconvolve import fftconvolve1D
+  #  from ._fftconvolve import fftconvolve1D
 from acoustics.signal import Filterbank, OctaveBand, convolve
 #from turbulence_jens import map_source_to_receiver
 from .tools import norm
