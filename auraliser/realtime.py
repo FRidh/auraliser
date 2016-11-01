@@ -107,6 +107,25 @@ def apply_spherical_spreading(signal, distance, inverse=False):#, nblock):
         return signal / distance
 
 
+#def undo_reflection(signal, nhop, impedance, angle, ntaps, force_hard):
+    #"""Undo reflection
+
+    #:param signal: Signal.
+    #:param nhop: Hop size.
+    #:param impedance: Fixed impedance.
+    #:param angle: Angle per hop.
+    #:param ntaps: Taps.
+    #:param force_hard: Whether to assume infinite impedance.
+    #"""
+    #if force_hard:
+        #tf =
+
+    #strength = Stream(reflection_factor_plane_wave(impedance, a) for a in angles.samples())
+    #tf = 1. / (1. + strength)
+    #impulse_responses = Stream(atmosphere.impulse_response(d, fs, ntaps=ntaps, inverse=inverse) for d in distance)
+    #signal = convolve_overlap_save(signal, impulse_responses, nhop, ntaps)
+
+
 def nextpow2(x):
     return int(2**np.ceil(np.log2(x)))
 
