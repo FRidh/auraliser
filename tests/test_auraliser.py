@@ -1,3 +1,7 @@
+"""
+Test the Auraliser Model.
+"""
+
 import auraliser
 import copy
 import logging
@@ -109,6 +113,8 @@ def settings(request):
 
 
 class _TestBase(object):
+    """Base class of classes we're going to tests.
+    """
 
     def deepcopy(self, item):
         assert copy.deepcopy(item) == item
@@ -116,7 +122,7 @@ class _TestBase(object):
     def test_equality(self, item):
         assert item == item
 
-    # Fails with Model. no idea yet why
+    # Fails with Model. No idea yet why.
     #def test_pickle(self, item):
 
         #with tempfile.TemporaryDirectory() as tmpdirname:

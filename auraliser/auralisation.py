@@ -289,8 +289,7 @@ class Auraliser(object):
     def get_object(self, name):
         """Get object by name.
 
-        :param name: Name of `object`.
-
+        :param name: Name of `object` or (proxy of) the real object.
         :returns: Proxy to `object`.
 
         """
@@ -318,19 +317,24 @@ class Auraliser(object):
 
 
     def add_source(self, name, position):#)*args, **kwargs):
-        """
-        Add source to auraliser.
+        """Add source to auraliser.
+
+        :param name: Name of source.
+        :param position: Position of source.
         """
         return self._add_object(name, Source, position)#*args, **kwargs)
 
     def add_receiver(self, name, position):#*args, **kwargs):
-        """
-        Add receiver to auraliser.
+        """Add receiver to auraliser.
+
+        :param name: Name of receiver
+        :param position: Position of receiver.
+
         """
         return self._add_object(name, Receiver, position=position)#*args, **kwargs)
 
     def update_settings(self, settings):
-        """Recursively update :attr:`settings` with `settings` using :func:`recursive_mapping_update`.
+        """Update :attr:`settings` with `settings` in-place recursively using :func:`recursive_mapping_update`.
 
         :param settings: New settings to use.
 
@@ -418,6 +422,8 @@ class Auraliser(object):
     def _auralise_subsource(subsource, receiver, settings, geometry, atmosphere):
         """Synthesize the signal of a subsource.
 
+        :returns: Generator that yields for each subsource a tuple consisting of the immission signal and immission vector.
+
         We check whether reflections are included or not.
         """
 
@@ -458,6 +464,19 @@ class Auraliser(object):
     @staticmethod
     def _auralise_source(source, receiver, settings, geometry, atmosphere):
         """Synthesize the signal at `receiver` due to `source`. This includes all subsources and respective mirror sources.
+
+        :param source: Source.
+        :type source: :class:`Source`
+        :param receiver: Receiver.
+        :type receiver: :class:`Receiver`
+        :param settings: Settings
+        :type settings: :func:`dict`
+        :param geometry: Geometry
+        :type geometry: :class:`Geometry`
+        :param atmosphere: Atmosphere
+        :type atmosphere: :class:`acoustics.atmosphere.Atmosphere`
+        :returns: Generator that yields tuples consisting of immission signal and immission vector.
+        :rtype: Generator
         """
         logger.info("_auralise_source: Auralising source {}".format(source.name))
 
