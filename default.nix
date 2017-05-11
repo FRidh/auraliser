@@ -22,7 +22,9 @@ buildPythonPackage rec {
     make clean
   '';
 
-  buildInputs = [ pytest cython ];
+  checkInputs = [ pytest ];
+  buildInputs = [ cython ];
+
   propagatedBuildInputs = [ acoustics cytoolz ism numpy
     scipy matplotlib numba scintillations turbulence
   ];
