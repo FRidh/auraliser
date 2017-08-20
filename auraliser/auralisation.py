@@ -37,7 +37,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from multipledispatch import dispatch
 
 import streaming
-from streaming.stream import Stream, BlockStream, repeat_each
+from streaming.stream import Stream, BlockStream, repeat_each, NO_PAD
 from streaming.signal import constant
 import cytoolz
 import copy
@@ -1017,14 +1017,15 @@ class Virtualsource(Base):
         #return signal
         settings = self._auraliser.settings
         nblock = settings['nblock']
-        signal = Stream(self._signal_generated).blocks(nblock=nblock)
+        pad = settings['pad']
+        signal = Stream(self._signal_generated).blocks(nblock=nblock, pad=pad)
         orientation = orientation.blocks(nblock)
         directivity = orientation.copy().map(lambda x: self.directivity.using_cartesian(*(x.T)).T)
         # Signal corrected with directivity
         signal = signal * directivity
         if settings['doppler']['include'] and settings['doppler']['amplitude']:
             mach = np.gradient(self.subsource.position)[0] * self._auraliser.sample_frequency / self._auraliser.atmosphere.soundspeed
-            mach = Stream(mach).blocks(nblock)
+            mach = Stream(mach).blocks(nblock, pad=pad)
             signal = BlockStream((auraliser.propagation.apply_doppler_amplitude_using_vectors(s, m, o, self.multipole) for s, m, o in zip(signal, mach, orientation)), nblock)
         return signal
 
@@ -1046,6 +1047,7 @@ _DEFAULT_SETTINGS = {
 
     'nblock'                :   8192,   # Default blocksize
     'fs'                    :   44100,  # Default sample frequency
+    'pad'                   :   NO_PAD  # Whether to pad blockstreams
 
     'reflections':{
         'include'           :   True,   # Include reflections

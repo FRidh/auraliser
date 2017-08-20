@@ -3,7 +3,7 @@ import itertools
 from scintillations.stream import modulate as apply_turbulence
 from scintillations.stream import transverse_speed
 
-from streaming.stream import Stream, BlockStream
+from streaming.stream import Stream, BlockStream, NO_PAD
 from streaming.signal import *
 import streaming.signal
 import logging
@@ -12,7 +12,7 @@ from acoustics.signal import impulse_response_real_even
 import auraliser.tools
 logger = auraliser.tools.create_logger(__name__)
 
-def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, inverse=False, distance_reducer=np.mean):
+def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps, inverse=False, distance_reducer=np.mean, pad=NO_PAD):
     """Apply atmospheric attenuation to signal.
 
     :param distance: Iterable with distances.
@@ -32,12 +32,12 @@ def apply_atmospheric_attenuation(signal, fs, distance, nhop, atmosphere, ntaps,
     # Partition `distance` into blocks, and reduce with `distance_reducer`.
     distance = distance.blocks(nhop).map(distance_reducer)
     ir = Stream(atmosphere.impulse_response(d, fs, ntaps=ntaps, inverse=inverse) for d in distance)
-    signal = convolve_overlap_save(signal, ir, nhop, ntaps)
+    signal = convolve_overlap_save(signal, ir, nhop=nhop, ntaps=ntaps, pad=pad)
     signal = signal.samples().drop(int(ntaps//2)) # Linear phase, correct for group delay caused by FIR filter.
     return signal
 
 
-def apply_reflection_strength(emission, nhop, spectra, effective, ntaps, force_hard):
+def apply_reflection_strength(emission, nhop, spectra, effective, ntaps, force_hard, pad=NO_PAD):
     """Apply mirror source strength.
 
     :param signal: Signal.
@@ -60,7 +60,7 @@ def apply_reflection_strength(emission, nhop, spectra, effective, ntaps, force_h
     else:
         logger.info("apply_reflection_strength: Soft ground.")
         impulse_responses = Stream(impulse_response_real_even(s, ntaps) for s in spectra)
-        emission = convolve_overlap_save(emission, impulse_responses, nhop, ntaps)
+        emission = convolve_overlap_save(emission, impulse_responses, nhop=nhop, ntaps=ntaps, pad=pad)
         # Filter has a delay we need to correct for.
         emission = emission.samples().drop(int(ntaps//2))
     return emission
