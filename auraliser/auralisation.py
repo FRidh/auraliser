@@ -615,6 +615,49 @@ def _ism_mirrors(subsource_position, receiver_position, emission, walls, setting
         yield Mirror(subsource_position.copy().blocks(nblock), mirror_receiver_position.blocks(nblock), signal.blocks(nblock))
 
 
+def _split_iterators(iterator, n=None):
+    """Split itererator of tuples into multiple iterators.
+
+    :param iterator: Iterator to be split.
+    :param n: Amount of iterators it will be split in. toolz.peak can be used to determine this value, but that is not lazy.
+
+    This is basically the same as x, y, z = zip(*a), however,
+    this function is lazy.
+    """
+    #if n is None:
+    #    item, iterator = cytoolz.peek(iterator)
+    #    n = len(item)
+    iterators = itertools.tee(iterator, n)
+    #iterators = ((sample[i] for sample in iterator) for i, iterator in enumerate(iterators))
+    # Above does not work?!
+
+    out = list()
+    out.append(s[0] for s in iterators[0])
+    out.append(s[1] for s in iterators[1])
+    out.append(s[2] for s in iterators[2])
+    iterators = out
+    return iterators
+
+
+def _stream_split_iterators(stream, n=None):
+    """Split stream of samples.
+    """
+    iterators = list(map(Stream, _split_iterators(iter(stream.samples()), n)))
+    return iterators
+
+
+def _resample_vectors(signal, delay, fs, n=None):
+    """Resample stream of vectors."""
+    signal = signal.samples()
+    if n is None:
+        n = signal.peek()
+    signal = _stream_split_iterators(signal, n)
+
+    apply_delay = auraliser.realtime.apply_doppler
+
+    signal = Stream(map(np.array, zip(*[apply_delay(s, d, fs) for s, d in zip(signal, delay.tee(n))])))
+    return signal
+
 
 def _apply_propagation_effects(source, receiver, signal, settings, fs, atmosphere):
     """Apply the propagation filters for this specific source-mirror-receiver combination.
@@ -646,6 +689,45 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
     source = source.blocks(nblock)
     receiver = receiver.blocks(nblock)
 
+    ## Source velocity vector
+    ##velocity = diff(source.copy()).blocks(nblock) * fs # streaming.signal.diff works only on scalars!
+    #velocity = source.copy().map(lambda x: np.diff(x, axis=0)) * fs
+
+    ## Source speed
+    #speed = velocity.copy().map(lambda x: np.linalg.norm(x, axis=-1))
+
+    # Apply delay due to spreading (Doppler shift)
+    if settings['doppler']['include'] and settings['doppler']['frequency']:
+        logger.info("_apply_propagation_effects: Applying Doppler frequency shift.")
+
+        # In order to compute the propagation delay, we need to the distance.
+        # For that, we need the source and receiver positions.
+
+        # Distance vector pointing from receiver to source.
+        distance_vector = source.copy() - receiver.copy()
+
+        # Norm of distance vector pointing from receiver to source.
+        distance = distance_vector.copy().map(lambda x: np.linalg.norm(x, axis=-1))
+
+        # Resampled signal
+        signal = auraliser.realtime.apply_doppler(signal=signal,
+                                                  delay=distance.copy()/atmosphere.soundspeed,
+                                                  fs=fs)
+
+        # Due to the Doppler shift we also need to resample the source position.
+        # and update the dependent quantities.
+
+        # Warp the source position. Position has n=3 dimensions.
+        source = _resample_vectors(source, delay=distance.copy()/atmosphere.soundspeed, fs=fs, n=3)
+
+        #print(source.peek())
+
+        source = source.blocks(nblock)
+
+        #print(source.peek())
+
+    # Geometrical quantities that now use the right time-axis.
+
     # Distance vector pointing from receiver to source.
     distance_vector = source.copy() - receiver.copy()
 
@@ -659,17 +741,12 @@ def _apply_propagation_effects(source, receiver, signal, settings, fs, atmospher
     # Source speed
     speed = velocity.copy().map(lambda x: np.linalg.norm(x, axis=-1))
 
+
     # Apply spherical spreading.
     if settings['spreading']['include']:
         logger.info("_apply_propagation_effects: Applying spherical spreading.")
         signal = auraliser.realtime.apply_spherical_spreading(signal.blocks(nblock), distance.copy().blocks(nblock))
 
-    # Apply delay due to spreading (Doppler shift)
-    if settings['doppler']['include'] and settings['doppler']['frequency']:
-        logger.info("_apply_propagation_effects: Applying Doppler frequency shift.")
-        signal = auraliser.realtime.apply_doppler(signal=signal,
-                                                  delay=distance.copy()/atmosphere.soundspeed,
-                                                  fs=fs)
 
     # Apply atmospheric turbulence
     if settings['turbulence']['include']:
